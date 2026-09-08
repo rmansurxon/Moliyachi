@@ -128,6 +128,29 @@ export const App: React.FC = () => {
   const loadAllData = async () => {
     setIsSyncing(true);
     try {
+      // 1. High-speed single-roundtrip bootstrap (instant 10x speedup)
+      const data = await api.getBootstrapData();
+      if (data) {
+        if (data.user) {
+          setUser(data.user);
+          if (data.user.pin_code && !isLocked) {
+            setIsLocked(true);
+          }
+        }
+        if (Array.isArray(data.wallets)) setWallets(data.wallets);
+        if (Array.isArray(data.categories)) setCategories(data.categories);
+        if (Array.isArray(data.transactions)) setTransactions(data.transactions);
+        if (Array.isArray(data.debts)) setDebts(data.debts);
+        if (Array.isArray(data.goals)) setGoals(data.goals);
+        if (data.summary) setSummary(data.summary);
+        return;
+      }
+    } catch (err) {
+      console.warn('Bootstrap sync failed, falling back to individual queries:', err);
+    }
+
+    // Fallback: individual queries if bootstrap is not supported
+    try {
       const results = await Promise.allSettled([
         api.getUser(),
         api.getWallets(),

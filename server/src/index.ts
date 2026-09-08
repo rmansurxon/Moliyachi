@@ -134,6 +134,40 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// --- HEALTH & BOOTSTRAP ROUTES ---
+app.get(['/health', '/api/health'], (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), time: new Date().toISOString() });
+});
+
+// High-speed Bootstrap: returns all 7 core data models in 1 single ultra-fast HTTP request
+app.get(['/bootstrap', '/api/bootstrap'], async (req, res) => {
+  const user = (req as any).user;
+
+  try {
+    const wallets = getWallets(user.id);
+    const categories = getCategories(user.id);
+    const transactions = getTransactions(user.id, 25);
+    const debts = getDebts(user.id, 'active');
+    const goals = getGoals(user.id);
+    const summary = getFinancialSummary(user.id, 'month');
+
+    res.json({
+      success: true,
+      data: {
+        user,
+        wallets,
+        categories,
+        transactions,
+        debts,
+        goals,
+        summary
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- AUTH & PROFILE ROUTES ---
 app.get('/api/user', (req, res) => {
   const user = (req as any).user;

@@ -91,6 +91,47 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
 }
 
 export const api = {
+  // High-Speed 1-Shot Bootstrap: loads all core data in a single request
+  async getBootstrapData(): Promise<{
+    user: User;
+    wallets: Wallet[];
+    categories: Category[];
+    transactions: Transaction[];
+    debts: Debt[];
+    goals: Goal[];
+    summary: FinancialSummary;
+  }> {
+    const res = await request<{ success: boolean; data: any }>('/bootstrap');
+    const d = res.data;
+    if (d?.user?.id) {
+      try {
+        localStorage.setItem('hisobchi_user_id', d.user.id);
+        localStorage.setItem('hisobchi_user_cache', JSON.stringify(d.user));
+      } catch {}
+    }
+    if (Array.isArray(d?.wallets)) {
+      try {
+        localStorage.setItem('hisobchi_wallets_cache', JSON.stringify(d.wallets));
+      } catch {}
+    }
+    if (Array.isArray(d?.categories)) {
+      try {
+        localStorage.setItem('hisobchi_categories_cache', JSON.stringify(d.categories));
+      } catch {}
+    }
+    if (Array.isArray(d?.transactions)) {
+      try {
+        localStorage.setItem('hisobchi_transactions_cache', JSON.stringify(d.transactions));
+      } catch {}
+    }
+    if (d?.summary) {
+      try {
+        localStorage.setItem('hisobchi_summary_cache', JSON.stringify(d.summary));
+      } catch {}
+    }
+    return d;
+  },
+
   // Auth & Profile
   async getUser(): Promise<User> {
     const data = await request<{ success: boolean; user: User }>('/user');
