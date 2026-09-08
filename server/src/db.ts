@@ -184,31 +184,37 @@ export function getOrCreateDefaultUser(telegramUser?: { id: string | number; fir
   let user: User | undefined;
 
   if (telegramUser?.id) {
-    user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(String(telegramUser.id)) as User | undefined;
+    const tgIdStr = String(telegramUser.id);
+    user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(tgIdStr) as User | undefined;
     if (!user) {
-      // Check if primary user exists and link telegram_id to it, or create new
-      const existingPrimary = db.prepare('SELECT * FROM users ORDER BY created_at ASC LIMIT 1').get() as User | undefined;
-      if (existingPrimary && !existingPrimary.telegram_id) {
-        db.prepare('UPDATE users SET telegram_id = ?, first_name = COALESCE(?, first_name), username = COALESCE(?, username) WHERE id = ?')
-          .run(String(telegramUser.id), telegramUser.first_name, telegramUser.username, existingPrimary.id);
-        user = db.prepare('SELECT * FROM users WHERE id = ?').get(existingPrimary.id) as User;
-      } else {
-        const newId = uuidv4();
-        db.prepare(`
-          INSERT INTO users (id, telegram_id, first_name, username, currency, theme, language, xp, streak, rank, diamonds)
-          VALUES (?, ?, ?, ?, 'UZS', 'dark', 'uz', 365, 1, 'bronze', 365)
-        `).run(newId, String(telegramUser.id), telegramUser.first_name || 'Mansurxon', telegramUser.username || '');
-        user = db.prepare('SELECT * FROM users WHERE id = ?').get(newId) as User;
-        createDefaultDataForUser(newId);
+      // Special case: link specifically to Mansurxon if matching his Telegram ID
+      if (tgIdStr === '8724834222') {
+        const primary = db.prepare("SELECT * FROM users WHERE id = 'user-mansurxon'").get() as User | undefined;
+        if (primary) {
+          db.prepare('UPDATE users SET telegram_id = ? WHERE id = ?').run(tgIdStr, 'user-mansurxon');
+          return db.prepare("SELECT * FROM users WHERE id = 'user-mansurxon'").get() as User;
+        }
       }
+
+      // Every other Telegram user gets their own brand new isolated user in SQLite
+      const newId = uuidv4();
+      db.prepare(`
+        INSERT INTO users (id, telegram_id, first_name, username, currency, theme, language, xp, streak, rank, diamonds)
+        VALUES (?, ?, ?, ?, 'UZS', 'dark', 'uz', 100, 1, 'bronze', 0)
+      `).run(newId, tgIdStr, telegramUser.first_name || 'Foydalanuvchi', telegramUser.username || '');
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(newId) as User;
+      createDefaultDataForUser(newId);
     }
   } else {
-    user = db.prepare('SELECT * FROM users ORDER BY created_at ASC LIMIT 1').get() as User | undefined;
+    user = db.prepare("SELECT * FROM users WHERE id = 'user-mansurxon'").get() as User | undefined;
+    if (!user) {
+      user = db.prepare('SELECT * FROM users ORDER BY created_at ASC LIMIT 1').get() as User | undefined;
+    }
     if (!user) {
       const newId = 'user-mansurxon';
       db.prepare(`
         INSERT INTO users (id, telegram_id, first_name, username, currency, theme, language, xp, streak, rank, diamonds)
-        VALUES (?, NULL, 'Mansurxon', 'mansurxon_ai', 'UZS', 'dark', 'uz', 365, 1, 'bronze', 365)
+        VALUES (?, '8724834222', 'Mansurxon', 'mansurxon_ai', 'UZS', 'dark', 'uz', 365, 1, 'bronze', 365)
       `).run(newId);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(newId) as User;
       createDefaultDataForUser(newId);

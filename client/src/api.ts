@@ -60,28 +60,127 @@ export function getAuthHeaders(): Record<string, string> {
 }
 
 export async function getEffectiveUserId(): Promise<string> {
-  const cached = localStorage.getItem('hisobchi_user_id');
-  if (cached) return cached;
+  const currentTgUser = tg?.initDataUnsafe?.user;
+  let currentTgId = currentTgUser?.id ? String(currentTgUser.id) : null;
 
-  const tgId = tg?.initDataUnsafe?.user?.id || localStorage.getItem('hisobchi_telegram_id');
-  if (tgId) {
-    try {
-      const { data } = await supabase
-        .from('users')
-        .select('id')
-        .eq('telegram_id', String(tgId))
-        .maybeSingle();
-
-      if (data?.id) {
-        localStorage.setItem('hisobchi_user_id', data.id);
-        return data.id;
-      }
-    } catch {}
+  if (!currentTgId && typeof window !== 'undefined' && window.location?.search) {
+    const params = new URLSearchParams(window.location.search);
+    const qTgId = params.get('tg_id');
+    if (qTgId) currentTgId = qTgId;
   }
 
-  const defaultId = 'user-mansurxon';
-  localStorage.setItem('hisobchi_user_id', defaultId);
-  return defaultId;
+  // 1. If opened inside Telegram or with a specific tg_id
+  if (currentTgId) {
+    const prevTgId = localStorage.getItem('hisobchi_current_tg_id');
+    if (prevTgId && prevTgId !== currentTgId) {
+      // Switched to a different Telegram account! Wipe previous user cache immediately
+      localStorage.clear();
+    }
+    localStorage.setItem('hisobchi_current_tg_id', currentTgId);
+    localStorage.setItem('hisobchi_telegram_id', currentTgId);
+
+    // Check if user already exists in Supabase
+    try {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('telegram_id', currentTgId)
+        .maybeSingle();
+
+      if (existingUser?.id) {
+        localStorage.setItem('hisobchi_user_id', existingUser.id);
+        localStorage.setItem('hisobchi_user_cache', JSON.stringify(existingUser));
+        return existingUser.id;
+      }
+
+      // Special case: if this is Mansurxon's Telegram ID, link to existing user-mansurxon
+      if (currentTgId === '8724834222') {
+        const { data: mUser } = await supabase.from('users').select('*').eq('id', 'user-mansurxon').maybeSingle();
+        if (mUser) {
+          await supabase.from('users').update({ telegram_id: currentTgId }).eq('id', 'user-mansurxon');
+          localStorage.setItem('hisobchi_user_id', 'user-mansurxon');
+          localStorage.setItem('hisobchi_user_cache', JSON.stringify(mUser));
+          return 'user-mansurxon';
+        }
+      }
+
+      // New Telegram User: Auto-create isolated private row in Supabase!
+      const newUserId = `user-tg-${currentTgId}`;
+      const newUser: User = {
+        id: newUserId,
+        telegram_id: currentTgId,
+        first_name: currentTgUser?.first_name || 'Foydalanuvchi',
+        username: currentTgUser?.username || '',
+        currency: 'UZS',
+        theme: 'dark',
+        language: 'uz',
+        xp: 100,
+        diamonds: 0,
+        streak: 1,
+        rank: 'bronze'
+      };
+
+      await supabase.from('users').insert([newUser]);
+
+      // Create separate 0-balance wallets for this new user
+      await supabase.from('wallets').insert([
+        { id: `w-${currentTgId}-card`, user_id: newUserId, name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', is_default: 1 },
+        { id: `w-${currentTgId}-cash`, user_id: newUserId, name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 },
+        { id: `w-${currentTgId}-invest`, user_id: newUserId, name: 'Jamgʻarma', type: 'invest', balance: 0, currency: 'UZS', color: '#7a5af8', is_default: 0 }
+      ]);
+
+      // Create default categories for this new user
+      await supabase.from('categories').insert([
+        { id: `c-${currentTgId}-1`, user_id: newUserId, name: 'Oziq-ovqat', type: 'expense', icon: 'Utensils', color: '#29c184', budget_limit: 0 },
+        { id: `c-${currentTgId}-2`, user_id: newUserId, name: 'Transport & Benzin', type: 'expense', icon: 'Car', color: '#1570ef', budget_limit: 0 },
+        { id: `c-${currentTgId}-3`, user_id: newUserId, name: 'Kiyim-kechak', type: 'expense', icon: 'Shirt', color: '#ec4899', budget_limit: 0 },
+        { id: `c-${currentTgId}-4`, user_id: newUserId, name: 'Kommunal & Uy', type: 'expense', icon: 'Home', color: '#f0646e', budget_limit: 0 },
+        { id: `c-${currentTgId}-5`, user_id: newUserId, name: 'Oylik maosh', type: 'income', icon: 'DollarSign', color: '#10b981', budget_limit: 0 },
+        { id: `c-${currentTgId}-6`, user_id: newUserId, name: 'Boshqa daromad', type: 'income', icon: 'TrendingUp', color: '#3182ce', budget_limit: 0 }
+      ]);
+
+      localStorage.setItem('hisobchi_user_id', newUserId);
+      localStorage.setItem('hisobchi_user_cache', JSON.stringify(newUser));
+      return newUserId;
+    } catch (err) {
+      console.error('Supabase user auto-provision error:', err);
+      const fallbackId = `user-tg-${currentTgId}`;
+      localStorage.setItem('hisobchi_user_id', fallbackId);
+      return fallbackId;
+    }
+  }
+
+  // 2. Not in Telegram and no tg_id provided: Device-isolated Guest Session
+  let deviceAnonId = localStorage.getItem('hisobchi_device_anon_id');
+  if (!deviceAnonId) {
+    deviceAnonId = `anon-${Math.random().toString(36).substring(2, 10)}`;
+    localStorage.setItem('hisobchi_device_anon_id', deviceAnonId);
+  }
+
+  try {
+    const { data: anonUser } = await supabase.from('users').select('id').eq('id', deviceAnonId).maybeSingle();
+    if (!anonUser) {
+      await supabase.from('users').insert([{
+        id: deviceAnonId,
+        first_name: 'Mehmon',
+        currency: 'UZS',
+        theme: 'dark',
+        language: 'uz',
+        xp: 0,
+        diamonds: 0,
+        streak: 1,
+        rank: 'bronze'
+      }]);
+      await supabase.from('wallets').insert([
+        { id: `w-${deviceAnonId}-1`, user_id: deviceAnonId, name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', is_default: 1 },
+        { id: `w-${deviceAnonId}-2`, user_id: deviceAnonId, name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 }
+      ]);
+    }
+    localStorage.setItem('hisobchi_user_id', deviceAnonId);
+    return deviceAnonId;
+  } catch {
+    return deviceAnonId;
+  }
 }
 
 async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -207,15 +306,16 @@ export const api = {
         supabase.from('articles').select('*').order('date', { ascending: false })
       ]);
 
+      const currentTgUser = tg?.initDataUnsafe?.user;
       const user = userRes.data || {
         id: userId,
-        first_name: 'Mansurxon',
-        username: 'mansurxon_ai',
+        first_name: currentTgUser?.first_name || 'Foydalanuvchi',
+        username: currentTgUser?.username || '',
         currency: 'UZS',
         theme: 'dark',
         language: 'uz',
-        xp: 365,
-        diamonds: 365,
+        xp: 100,
+        diamonds: 0,
         streak: 1,
         rank: 'bronze'
       };

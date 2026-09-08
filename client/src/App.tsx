@@ -28,38 +28,45 @@ import { SubscriptionView } from './views/SubscriptionView';
 
 // Fallback initial data for instant zero-latency render (prevents PWA blank screen)
 const getInitialUser = (): User => {
+  const tgUser = tg?.initDataUnsafe?.user;
+  const currentTgId = tgUser?.id ? String(tgUser.id) : null;
+
   try {
     const cached = localStorage.getItem('hisobchi_user_cache');
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      // Validate that cached user belongs to current Telegram account
+      if (!currentTgId || parsed.telegram_id === currentTgId || parsed.id === `user-tg-${currentTgId}` || (currentTgId === '8724834222' && parsed.id === 'user-mansurxon')) {
+        return parsed;
+      }
+    }
   } catch {}
 
-  const tgUser = tg?.initDataUnsafe?.user;
   return {
-    id: tgUser?.id ? `tg-${tgUser.id}` : 'user-mansurxon',
-    first_name: tgUser?.first_name || 'Mansurxon',
-    username: tgUser?.username || 'mansurxon_ai',
+    id: currentTgId ? `user-tg-${currentTgId}` : 'guest',
+    first_name: tgUser?.first_name || 'Foydalanuvchi',
+    username: tgUser?.username || '',
     currency: 'UZS',
     theme: 'dark',
     language: 'uz',
-    xp: 365,
-    diamonds: 365,
+    xp: 100,
+    diamonds: 0,
     streak: 1,
     rank: 'bronze'
   };
 };
 
 const getInitialWallets = (): Wallet[] => {
+  const tgUser = tg?.initDataUnsafe?.user;
+  const currentTgId = tgUser?.id ? String(tgUser.id) : null;
   try {
     const cached = localStorage.getItem('hisobchi_wallets_cache');
-    if (cached) return JSON.parse(cached);
+    const cachedUserId = localStorage.getItem('hisobchi_user_id');
+    if (cached && (!currentTgId || cachedUserId?.includes(currentTgId) || (currentTgId === '8724834222' && cachedUserId === 'user-mansurxon'))) {
+      return JSON.parse(cached);
+    }
   } catch {}
-
-  return [
-    { id: 'w-1', user_id: 'user-mansurxon', name: 'Investitsiya', type: 'invest', balance: 0, currency: 'UZS', color: '#7a5af8', is_default: 0 },
-    { id: 'w-2', user_id: 'user-mansurxon', name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', card_number_last4: '8600', is_default: 1 },
-    { id: 'w-3', user_id: 'user-mansurxon', name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 },
-    { id: 'w-4', user_id: 'user-mansurxon', name: 'Dollar', type: 'visa', balance: 0, currency: 'USD', color: '#3182ce', card_number_last4: '4100', is_default: 0 }
-  ];
+  return [];
 };
 
 const getInitialCategories = (): Category[] => {
