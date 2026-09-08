@@ -196,6 +196,27 @@ export async function insertTransactionToSupabase(tx: any) {
       .select()
       .single();
     if (error) throw error;
+
+    // Update wallet balance in Supabase
+    try {
+      const { data: w } = await supabase.from('wallets').select('balance').eq('id', tx.balance_id).single();
+      if (w) {
+        let newBal = w.balance;
+        if (tx.type === 'expense') newBal -= tx.amount;
+        else if (tx.type === 'income') newBal += tx.amount;
+        else if (tx.type === 'transfer' && tx.to_balance_id) {
+          newBal -= tx.amount;
+          const { data: toW } = await supabase.from('wallets').select('balance').eq('id', tx.to_balance_id).single();
+          if (toW) {
+            await supabase.from('wallets').update({ balance: toW.balance + tx.amount }).eq('id', tx.to_balance_id);
+          }
+        }
+        await supabase.from('wallets').update({ balance: newBal }).eq('id', tx.balance_id);
+      }
+    } catch (e: any) {
+      console.warn('Supabase wallet balance update warning:', e.message);
+    }
+
     return data;
   } catch (err: any) {
     console.error('Supabase insertTransaction error:', err.message);
@@ -203,7 +224,75 @@ export async function insertTransactionToSupabase(tx: any) {
   }
 }
 
-// 10. AI Chat Messages History
+// 10. Operatsiyani o'chirish / bekor qilish (Delete Transaction from Supabase)
+export async function deleteTransactionFromSupabase(txId: string) {
+  if (!supabase) return false;
+  try {
+    const { data: tx } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', txId)
+      .single();
+
+    if (tx) {
+      // Revert wallet balance
+      const { data: w } = await supabase.from('wallets').select('balance').eq('id', tx.balance_id).single();
+      if (w) {
+        let revBal = w.balance;
+        if (tx.type === 'expense') revBal += tx.amount;
+        else if (tx.type === 'income') revBal -= tx.amount;
+        else if (tx.type === 'transfer' && tx.to_balance_id) {
+          revBal += tx.amount;
+          const { data: toW } = await supabase.from('wallets').select('balance').eq('id', tx.to_balance_id).single();
+          if (toW) {
+            await supabase.from('wallets').update({ balance: toW.balance - tx.amount }).eq('id', tx.to_balance_id);
+          }
+        }
+        await supabase.from('wallets').update({ balance: revBal }).eq('id', tx.balance_id);
+      }
+    }
+
+    const { error } = await supabase.from('transactions').delete().eq('id', txId);
+    if (error) throw error;
+    return true;
+  } catch (err: any) {
+    console.error('Supabase deleteTransaction error:', err.message);
+    return false;
+  }
+}
+
+// 11. Qarz qo'shish (Insert Debt to Supabase)
+export async function insertDebtToSupabase(debt: any) {
+  if (!supabase) return null;
+  try {
+    const payload = {
+      id: debt.id,
+      user_id: debt.user_id,
+      type: debt.type || 'lent',
+      counterparty_name: debt.counterparty_name,
+      phone: debt.phone || null,
+      amount: debt.amount,
+      paid_amount: debt.paid_amount || 0,
+      due_date: debt.due_date || null,
+      status: debt.status || 'active',
+      notes: debt.notes || null,
+      created_at: debt.created_at || new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('debts')
+      .insert([payload])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (err: any) {
+    console.error('Supabase insertDebt error:', err.message);
+    return null;
+  }
+}
+
+// 12. AI Chat Messages History
 export async function getChatMessagesFromSupabase(userId: string) {
   if (!supabase) return [];
   try {
@@ -214,7 +303,6 @@ export async function getChatMessagesFromSupabase(userId: string) {
       .order('created_at', { ascending: true });
 
     if (error) {
-      // If table doesn't exist yet, return empty gracefully
       return [];
     }
     return data || [];

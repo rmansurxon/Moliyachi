@@ -10,7 +10,9 @@ import {
   getTransactions,
   addTransaction,
   deleteTransaction,
+  deleteLastTransaction,
   getDebts,
+  addDebt,
   getGoals,
   getVouchers,
   getArticles,
@@ -35,13 +37,13 @@ import {
   getWalletsFromSupabase,
   getCategoriesFromSupabase,
   insertTransactionToSupabase,
+  deleteTransactionFromSupabase,
+  insertDebtToSupabase,
   getChatMessagesFromSupabase,
   saveChatMessageToSupabase,
   resetSupabaseBalancesAndTransactions
 } from './supabase.js';
 import { isOpenRouterConfigured, callOpenRouterAI } from './openrouter.js';
-
-
 
 dotenv.config();
 
@@ -60,13 +62,35 @@ app.use(express.json());
 
 // Middleware: extract or identify user
 app.use((req, res, next) => {
-  // Check telegram initData or custom header
   const authHeader = req.headers['x-user-id'] as string;
+  const tgIdHeader = req.headers['x-telegram-id'] as string;
+  const tgUserHeader = req.headers['x-telegram-user'] as string;
   let user;
 
-  if (authHeader) {
+  // 1. If Telegram WebApp header present, find or create exact Telegram user
+  if (tgIdHeader) {
+    let tgUserObj: any = { id: tgIdHeader };
+    if (tgUserHeader) {
+      try {
+        tgUserObj = JSON.parse(tgUserHeader);
+      } catch {}
+    }
+    user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(String(tgIdHeader));
+    if (!user) {
+      user = getOrCreateDefaultUser({
+        id: tgUserObj.id || tgIdHeader,
+        first_name: tgUserObj.first_name || 'Foydalanuvchi',
+        username: tgUserObj.username || ''
+      });
+    }
+  }
+
+  // 2. If custom user-id header provided
+  if (!user && authHeader) {
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(authHeader);
   }
+
+  // 3. Fallback to default user
   if (!user) {
     user = getOrCreateDefaultUser();
   }
@@ -272,10 +296,25 @@ app.post('/api/transactions', async (req, res) => {
 });
 
 
+app.delete('/api/transactions/last', async (req, res) => {
+  const user = (req as any).user;
+  const deletedTx = deleteLastTransaction(user.id);
+  if (!deletedTx) {
+    return res.status(404).json({ success: false, message: 'Bekor qilish uchun operatsiya topilmadi' });
+  }
+  if (isSupabaseActive()) {
+    deleteTransactionFromSupabase(deletedTx.id).catch(e => console.error('Supabase undo error:', e));
+  }
+  res.json({ success: true, transaction: deletedTx, message: 'Oxirgi operatsiya bekor qilindi' });
+});
+
 app.delete('/api/transactions/:id', (req, res) => {
   const user = (req as any).user;
   const { id } = req.params;
   const deleted = deleteTransaction(id, user.id);
+  if (deleted && isSupabaseActive()) {
+    deleteTransactionFromSupabase(id).catch(() => {});
+  }
   res.json({ success: deleted });
 });
 
@@ -478,12 +517,18 @@ app.post('/api/ai/chat', async (req, res) => {
   const wallets = getWallets(user.id);
   const summary = getFinancialSummary(user.id, 'month');
 
+  // 1. Run ultra-fast 99.9% deterministic Uzbek Financial NLP engine first
+  const localReply = getAIConversationalReply(message, categories, summary);
   let replyText = '';
   let parsedData: any = null;
   let aiSource = 'local-nlp';
 
-  // 1. Try OpenRouter AI if configured
-  if (isOpenRouterConfigured()) {
+  if (localReply.isAlgorithmic) {
+    replyText = localReply.text;
+    parsedData = localReply.parsedData;
+    aiSource = 'local-nlp';
+  } else if (isOpenRouterConfigured()) {
+    // 0.1% edge case: complex open-ended query not covered by deterministic rules
     try {
       const aiRes = await callOpenRouterAI(message, categories, summary, history);
       replyText = aiRes.text;
@@ -491,35 +536,61 @@ app.post('/api/ai/chat', async (req, res) => {
       aiSource = 'openrouter';
     } catch (err: any) {
       console.warn('OpenRouter xatosi, mahalliy NLP ga o\'tilmoqda:', err.message);
+      replyText = localReply.text;
+      parsedData = localReply.parsedData;
+    }
+  } else {
+    replyText = localReply.text;
+    parsedData = localReply.parsedData;
+  }
+
+  // 2. If debt action detected, save debt
+  if (parsedData && parsedData.action === 'save_debt' && parsedData.debt) {
+    try {
+      const savedDebt = addDebt({
+        user_id: user.id,
+        type: parsedData.debt.type,
+        counterparty_name: parsedData.debt.counterparty_name,
+        amount: parsedData.debt.amount,
+        notes: parsedData.debt.notes
+      });
+      if (isSupabaseActive()) {
+        insertDebtToSupabase(savedDebt).catch(e => console.error('Supabase debt sync error:', e));
+      }
+    } catch (e: any) {
+      console.error('Debt save error:', e.message);
     }
   }
 
-  // 2. Fallback to smart local Uzbek NLP engine
-  if (!replyText) {
-    const localReply = getAIConversationalReply(message, categories, summary);
-    replyText = localReply.text;
-    parsedData = localReply.parsedData;
-    aiSource = 'local-nlp';
-  }
-
-  // Save transaction if classified
+  // 3. Save transaction if classified
   let savedTx = null;
   if (parsedData && parsedData.isTransaction && parsedData.amount > 0) {
     const defaultWallet = wallets.find(w => w.is_default === 1) || wallets[0];
+    let targetWallet = defaultWallet;
+
+    if (parsedData.preferredWalletKeyword) {
+      const kw = parsedData.preferredWalletKeyword.toLowerCase();
+      const matched = wallets.find(w =>
+        w.name.toLowerCase().includes(kw) ||
+        w.type.toLowerCase().includes(kw)
+      );
+      if (matched) targetWallet = matched;
+    }
+
     const cat = categories.find(c =>
       c.id === parsedData.matchedCategoryId ||
       c.name.toLowerCase().includes((parsedData.categoryName || '').toLowerCase())
     ) || categories[0];
 
-    if (defaultWallet) {
+    if (targetWallet) {
       savedTx = addTransaction({
         user_id: user.id,
-        balance_id: defaultWallet.id,
+        balance_id: targetWallet.id,
         category_id: cat?.id,
         amount: parsedData.amount,
         type: parsedData.type || 'expense',
         description: parsedData.description || message,
-        category_label: `${cat?.name || 'Toifa'} • ${defaultWallet.name}`
+        category_label: `${cat?.name || 'Toifa'} • ${targetWallet.name}`
       });
 
       if (isSupabaseActive()) {

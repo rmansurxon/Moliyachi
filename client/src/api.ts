@@ -19,82 +19,136 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | '
 
 const API_BASE = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api');
 
+// Centralized request helper with Telegram Auto-Auth & persistence
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  try {
+    const tgUser = tg?.initDataUnsafe?.user;
+    if (tgUser && tgUser.id) {
+      headers['x-telegram-id'] = String(tgUser.id);
+      headers['x-telegram-user'] = JSON.stringify(tgUser);
+    }
+  } catch {}
+
+  try {
+    const savedUserId = localStorage.getItem('hisobchi_user_id');
+    if (savedUserId) {
+      headers['x-user-id'] = savedUserId;
+    }
+  } catch {}
+
+  return headers;
+}
+
+async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const authHeaders = getAuthHeaders();
+  const mergedHeaders: Record<string, string> = {
+    ...authHeaders,
+    ...((options.headers as Record<string, string>) || {})
+  };
+
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: mergedHeaders
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${errText || res.statusText}`);
+  }
+
+  return res.json();
+}
+
 export const api = {
   // Auth & Profile
   async getUser(): Promise<User> {
-    const res = await fetch(`${API_BASE}/user`);
-    const data = await res.json();
+    const data = await request<{ success: boolean; user: User }>('/user');
+    if (data?.user?.id) {
+      try {
+        localStorage.setItem('hisobchi_user_id', data.user.id);
+        localStorage.setItem('hisobchi_user_cache', JSON.stringify(data.user));
+      } catch {}
+    }
     return data.user;
   },
 
   async updateProfile(updates: Partial<User>): Promise<User> {
-    const res = await fetch(`${API_BASE}/user/profile`, {
+    const data = await request<{ success: boolean; user: User }>('/user/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
     });
-    const data = await res.json();
+    if (data?.user) {
+      try {
+        localStorage.setItem('hisobchi_user_cache', JSON.stringify(data.user));
+      } catch {}
+    }
     return data.user;
   },
 
   // Wallets / Balances
   async getWallets(): Promise<Wallet[]> {
-    const res = await fetch(`${API_BASE}/wallets`);
-    const data = await res.json();
+    const data = await request<{ success: boolean; wallets: Wallet[] }>('/wallets');
+    if (Array.isArray(data?.wallets)) {
+      try {
+        localStorage.setItem('hisobchi_wallets_cache', JSON.stringify(data.wallets));
+      } catch {}
+    }
     return data.wallets;
   },
 
   async createWallet(wallet: Partial<Wallet>): Promise<Wallet> {
-    const res = await fetch(`${API_BASE}/wallets`, {
+    const data = await request<{ success: boolean; wallet: Wallet }>('/wallets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(wallet)
     });
-    const data = await res.json();
     return data.wallet;
   },
 
   async updateWallet(id: string, updates: Partial<Wallet>): Promise<Wallet> {
-    const res = await fetch(`${API_BASE}/wallets/${id}`, {
+    const data = await request<{ success: boolean; wallet: Wallet }>(`/wallets/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
     });
-    const data = await res.json();
     return data.wallet;
   },
 
   async deleteWallet(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/wallets/${id}`, {
+    const data = await request<{ success: boolean }>(`/wallets/${id}`, {
       method: 'DELETE'
     });
-    const data = await res.json();
     return data.success;
   },
 
   async transfer(params: { from_wallet_id: string; to_wallet_id: string; amount: number; description?: string }) {
-    const res = await fetch(`${API_BASE}/wallets/transfer`, {
+    return request('/wallets/transfer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
     });
-    return res.json();
   },
 
   // Categories
   async getCategories(): Promise<Category[]> {
-    const res = await fetch(`${API_BASE}/categories`);
-    const data = await res.json();
+    const data = await request<{ success: boolean; categories: Category[] }>('/categories');
+    if (Array.isArray(data?.categories)) {
+      try {
+        localStorage.setItem('hisobchi_categories_cache', JSON.stringify(data.categories));
+      } catch {}
+    }
     return data.categories;
   },
 
   async createCategory(cat: Partial<Category>): Promise<Category> {
-    const res = await fetch(`${API_BASE}/categories`, {
+    const data = await request<{ success: boolean; category: Category }>('/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cat)
     });
-    const data = await res.json();
     return data.category;
   },
 
@@ -105,8 +159,13 @@ export const api = {
     if (params?.type) q.set('type', params.type);
     if (params?.category_id) q.set('category_id', params.category_id);
 
-    const res = await fetch(`${API_BASE}/transactions?${q.toString()}`);
-    const data = await res.json();
+    const qs = q.toString();
+    const data = await request<{ success: boolean; transactions: Transaction[] }>(`/transactions${qs ? `?${qs}` : ''}`);
+    if (Array.isArray(data?.transactions)) {
+      try {
+        localStorage.setItem('hisobchi_transactions_cache', JSON.stringify(data.transactions));
+      } catch {}
+    }
     return data.transactions;
   },
 
@@ -118,121 +177,110 @@ export const api = {
     description: string;
     date?: string;
   }): Promise<Transaction> {
-    const res = await fetch(`${API_BASE}/transactions`, {
+    const data = await request<{ success: boolean; transaction: Transaction }>('/transactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tx)
     });
-    const data = await res.json();
     return data.transaction;
   },
 
   async deleteTransaction(id: string) {
-    const res = await fetch(`${API_BASE}/transactions/${id}`, { method: 'DELETE' });
-    return res.json();
+    return request(`/transactions/${id}`, { method: 'DELETE' });
+  },
+
+  async deleteLastTransaction() {
+    return request<{ success: boolean; transaction?: Transaction; message?: string }>('/transactions/last', { method: 'DELETE' });
   },
 
   // Debts
   async getDebts(status?: 'active' | 'closed'): Promise<Debt[]> {
-    const res = await fetch(`${API_BASE}/debts${status ? `?status=${status}` : ''}`);
-    const data = await res.json();
-    return data.debts;
+    const data = await request<{ success: boolean; debts: Debt[] }>(`/debts${status ? `?status=${status}` : ''}`);
+    return data.debts || [];
   },
 
   async createDebt(debt: Partial<Debt>): Promise<Debt> {
-    const res = await fetch(`${API_BASE}/debts`, {
+    const data = await request<{ success: boolean; debt: Debt }>('/debts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(debt)
     });
-    const data = await res.json();
     return data.debt;
   },
 
   async payDebt(id: string, amount: number) {
-    const res = await fetch(`${API_BASE}/debts/${id}/pay`, {
+    return request(`/debts/${id}/pay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
     });
-    return res.json();
   },
 
   // Goals
   async getGoals(): Promise<Goal[]> {
-    const res = await fetch(`${API_BASE}/goals`);
-    const data = await res.json();
-    return data.goals;
+    const data = await request<{ success: boolean; goals: Goal[] }>('/goals');
+    return data.goals || [];
   },
 
   async createGoal(goal: Partial<Goal>): Promise<Goal> {
-    const res = await fetch(`${API_BASE}/goals`, {
+    const data = await request<{ success: boolean; goal: Goal }>('/goals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(goal)
     });
-    const data = await res.json();
     return data.goal;
   },
 
   async contributeGoal(id: string, amount: number, wallet_id?: string) {
-    const res = await fetch(`${API_BASE}/goals/${id}/contribute`, {
+    return request(`/goals/${id}/contribute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount, wallet_id })
     });
-    return res.json();
-  },
-
-  // Gamification & Vouchers
-  async getGamificationStatus() {
-    const res = await fetch(`${API_BASE}/gamification/status`);
-    return res.json();
   },
 
   // Articles
   async getArticles(): Promise<Article[]> {
-    const res = await fetch(`${API_BASE}/articles`);
-    const data = await res.json();
-    return data.articles;
+    const data = await request<{ success: boolean; articles: Article[] }>('/articles');
+    return data.articles || [];
   },
 
   // Statistics
   async getSummary(period: 'week' | 'month' | 'year' = 'month'): Promise<FinancialSummary> {
-    const res = await fetch(`${API_BASE}/statistics/summary?period=${period}`);
-    const data = await res.json();
+    const data = await request<{ success: boolean; summary: FinancialSummary }>(`/statistics/summary?period=${period}`);
+    if (data?.summary) {
+      try {
+        localStorage.setItem('hisobchi_summary_cache', JSON.stringify(data.summary));
+      } catch {}
+    }
     return data.summary;
   },
 
   async getMonthlyWrap() {
-    const res = await fetch(`${API_BASE}/statistics/monthly-wrap`);
-    return res.json();
+    return request('/statistics/monthly-wrap');
   },
 
   // AI Chat & Speech-to-Expense
   async getChatHistory() {
     try {
-      const res = await fetch(`${API_BASE}/ai/chat/history`);
-      return await res.json();
+      return await request<{ success: boolean; messages: any[] }>('/ai/chat/history');
     } catch {
       return { success: false, messages: [] };
     }
   },
 
   async sendAIChat(message: string, history?: any[]) {
-    const res = await fetch(`${API_BASE}/ai/chat`, {
+    return request('/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, history })
     });
-    return res.json();
   },
 
   async resetData() {
-    const res = await fetch(`${API_BASE}/system/reset-data`, {
+    return request('/system/reset-data', {
       method: 'POST'
     });
-    return res.json();
   },
 
   // Receipt Scanner
@@ -240,25 +288,24 @@ export const api = {
     if (fileOrBase64 instanceof File) {
       const formData = new FormData();
       formData.append('receipt', fileOrBase64);
+      const authHeaders = getAuthHeaders();
       const res = await fetch(`${API_BASE}/ai/scan-receipt`, {
         method: 'POST',
+        headers: authHeaders,
         body: formData
       });
       return res.json();
     } else if (typeof fileOrBase64 === 'string') {
-      const res = await fetch(`${API_BASE}/ai/scan-receipt`, {
+      return request('/ai/scan-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64: fileOrBase64 })
       });
-      return res.json();
     } else {
-      const res = await fetch(`${API_BASE}/ai/scan-receipt`, {
+      return request('/ai/scan-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      return res.json();
     }
   }
 };
-

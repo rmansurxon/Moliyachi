@@ -18,19 +18,79 @@ import { BalancesView } from './views/BalancesView';
 import { CategoriesView } from './views/CategoriesView';
 import { SettingsView } from './views/SettingsView';
 
+// Fallback initial data for instant zero-latency render (prevents PWA blank screen)
+const getInitialUser = (): User => {
+  try {
+    const cached = localStorage.getItem('hisobchi_user_cache');
+    if (cached) return JSON.parse(cached);
+  } catch {}
+
+  const tgUser = tg?.initDataUnsafe?.user;
+  return {
+    id: tgUser?.id ? `tg-${tgUser.id}` : 'user-mansurxon',
+    first_name: tgUser?.first_name || 'Mansurxon',
+    username: tgUser?.username || 'mansurxon_ai',
+    currency: 'UZS',
+    theme: 'dark',
+    language: 'uz',
+    xp: 365,
+    diamonds: 365,
+    streak: 1,
+    rank: 'bronze'
+  };
+};
+
+const getInitialWallets = (): Wallet[] => {
+  try {
+    const cached = localStorage.getItem('hisobchi_wallets_cache');
+    if (cached) return JSON.parse(cached);
+  } catch {}
+
+  return [
+    { id: 'w-invest', user_id: 'default', name: 'Investitsiya', type: 'invest', balance: 0, currency: 'UZS', color: '#7a5af8', is_default: 0 },
+    { id: 'w-card', user_id: 'default', name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', card_number_last4: '8600', is_default: 1 },
+    { id: 'w-cash', user_id: 'default', name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 },
+    { id: 'w-usd', user_id: 'default', name: 'Dollar', type: 'visa', balance: 0, currency: 'USD', color: '#3182ce', card_number_last4: '4100', is_default: 0 }
+  ];
+};
+
+const getInitialCategories = (): Category[] => {
+  try {
+    const cached = localStorage.getItem('hisobchi_categories_cache');
+    if (cached) return JSON.parse(cached);
+  } catch {}
+  return [];
+};
+
+const getInitialTransactions = (): Transaction[] => {
+  try {
+    const cached = localStorage.getItem('hisobchi_transactions_cache');
+    if (cached) return JSON.parse(cached);
+  } catch {}
+  return [];
+};
+
+const getInitialSummary = (): FinancialSummary | null => {
+  try {
+    const cached = localStorage.getItem('hisobchi_summary_cache');
+    if (cached) return JSON.parse(cached);
+  } catch {}
+  return null;
+};
+
 export const App: React.FC = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [currentTab, setCurrentTab] = useState<TabType>('home');
 
-  // Application Data States
-  const [user, setUser] = useState<User | null>(null);
-  const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  // Application Data States initialized with instant offline cache
+  const [user, setUser] = useState<User>(getInitialUser);
+  const [wallets, setWallets] = useState<Wallet[]>(getInitialWallets);
+  const [categories, setCategories] = useState<Category[]>(getInitialCategories);
+  const [transactions, setTransactions] = useState<Transaction[]>(getInitialTransactions);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [summary, setSummary] = useState<FinancialSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<FinancialSummary | null>(getInitialSummary);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -58,15 +118,15 @@ export const App: React.FC = () => {
     }
   }, [theme]);
 
-  // Load all data on mount
+  // Load all data from backend on mount
   useEffect(() => {
     loadAllData();
   }, []);
 
   const loadAllData = async () => {
-    setLoading(true);
+    setIsSyncing(true);
     try {
-      const [u, w, c, t, d, g, s] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getUser(),
         api.getWallets(),
         api.getCategories(),
@@ -76,22 +136,40 @@ export const App: React.FC = () => {
         api.getSummary('month')
       ]);
 
-      setUser(u);
-      setWallets(w);
-      setCategories(c);
-      setTransactions(t);
-      setDebts(d);
-      setGoals(g);
-      setSummary(s);
+      if (results[0].status === 'fulfilled' && results[0].value) {
+        setUser(results[0].value);
+        if (results[0].value.pin_code && !isLocked) {
+          setIsLocked(true);
+        }
+      }
 
-      // Check pin lock
-      if (u?.pin_code && !isLocked) {
-        setIsLocked(true);
+      if (results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
+        setWallets(results[1].value);
+      }
+
+      if (results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
+        setCategories(results[2].value);
+      }
+
+      if (results[3].status === 'fulfilled' && Array.isArray(results[3].value)) {
+        setTransactions(results[3].value);
+      }
+
+      if (results[4].status === 'fulfilled' && Array.isArray(results[4].value)) {
+        setDebts(results[4].value);
+      }
+
+      if (results[5].status === 'fulfilled' && Array.isArray(results[5].value)) {
+        setGoals(results[5].value);
+      }
+
+      if (results[6].status === 'fulfilled' && results[6].value) {
+        setSummary(results[6].value);
       }
     } catch (err) {
-      console.error('Data load error:', err);
+      console.warn('Background sync warning:', err);
     } finally {
-      setLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -119,17 +197,6 @@ export const App: React.FC = () => {
     }
   };
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen bg-[#18222d] flex flex-col items-center justify-center text-white space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#12A99D] via-[#29c184] to-[#9DFC38] flex items-center justify-center font-black text-xl text-black shadow-lg shadow-[#29c184]/40 animate-pulse">
-          H
-        </div>
-        <p className="text-xs font-bold text-[#8b9aa8] tracking-wider uppercase">Hisobchi AI yuklanmoqda...</p>
-      </div>
-    );
-  }
-
   if (isLocked && user?.pin_code) {
     return (
       <LockScreen
@@ -155,6 +222,13 @@ export const App: React.FC = () => {
           user={user}
           onOpenSettings={() => setCurrentTab('settings')}
         />
+
+        {/* Syncing status bar (subtle) */}
+        {isSyncing && (
+          <div className="h-0.5 bg-[#29c184]/40 w-full overflow-hidden">
+            <div className="h-full bg-[#29c184] animate-pulse" style={{ width: '100%' }}></div>
+          </div>
+        )}
 
         {/* View Routing */}
         <main className="flex-1 overflow-y-auto pb-20 md:pb-8">

@@ -456,6 +456,30 @@ export function getDebts(userId: string, status?: 'active' | 'closed'): Debt[] {
   return db.prepare('SELECT * FROM debts WHERE user_id = ? ORDER BY due_date ASC, created_at DESC').all(userId) as Debt[];
 }
 
+export function addDebt(params: {
+  user_id: string;
+  type: 'lent' | 'borrowed';
+  counterparty_name: string;
+  amount: number;
+  due_date?: string;
+  notes?: string;
+}): Debt {
+  const id = uuidv4();
+  db.prepare(`
+    INSERT INTO debts (id, user_id, type, counterparty_name, amount, paid_amount, due_date, status, notes)
+    VALUES (?, ?, ?, ?, ?, 0, ?, 'active', ?)
+  `).run(id, params.user_id, params.type, params.counterparty_name, params.amount, params.due_date || null, params.notes || null);
+
+  return db.prepare('SELECT * FROM debts WHERE id = ?').get(id) as Debt;
+}
+
+export function deleteLastTransaction(userId: string): Transaction | null {
+  const lastTx = db.prepare('SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(userId) as Transaction | undefined;
+  if (!lastTx) return null;
+  const success = deleteTransaction(lastTx.id, userId);
+  return success ? lastTx : null;
+}
+
 export function getGoals(userId: string): Goal[] {
   return db.prepare('SELECT * FROM goals WHERE user_id = ? ORDER BY created_at DESC').all(userId) as Goal[];
 }
