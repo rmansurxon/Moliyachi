@@ -203,3 +203,73 @@ export async function insertTransactionToSupabase(tx: any) {
   }
 }
 
+// 10. AI Chat Messages History
+export async function getChatMessagesFromSupabase(userId: string) {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // If table doesn't exist yet, return empty gracefully
+      return [];
+    }
+    return data || [];
+  } catch (err: any) {
+    console.warn('Supabase chat_messages fetch warning:', err.message);
+    return [];
+  }
+}
+
+export async function saveChatMessageToSupabase(userId: string, sender: 'user' | 'ai', text: string, txData?: any) {
+  if (!supabase) return null;
+  try {
+    const payload = {
+      user_id: userId,
+      sender,
+      text,
+      transaction_data: txData ? JSON.stringify(txData) : null,
+      created_at: new Date().toISOString()
+    };
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase saveChatMessage table error:', error.message);
+      return null;
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('Supabase saveChatMessage warning:', err.message);
+    return null;
+  }
+}
+
+export async function resetSupabaseBalancesAndTransactions(userId?: string) {
+  if (!supabase) return false;
+  try {
+    // 1. Reset balances to 0
+    let walletQuery = supabase.from('wallets').update({ balance: 0 });
+    if (userId) walletQuery = walletQuery.eq('user_id', userId);
+    else walletQuery = walletQuery.neq('id', 'placeholder');
+    await walletQuery;
+
+    // 2. Delete test transactions
+    let txQuery = supabase.from('transactions').delete();
+    if (userId) txQuery = txQuery.eq('user_id', userId);
+    else txQuery = txQuery.neq('id', 'placeholder');
+    await txQuery;
+
+    return true;
+  } catch (err: any) {
+    console.error('Supabase reset error:', err.message);
+    return false;
+  }
+}
+

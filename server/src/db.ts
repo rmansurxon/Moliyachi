@@ -128,6 +128,16 @@ export function initDB() {
       image_url TEXT NOT NULL,
       date TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      sender TEXT NOT NULL,
+      text TEXT NOT NULL,
+      transaction_data TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   // Seed default articles
@@ -215,9 +225,9 @@ export function createDefaultDataForUser(userId: string) {
   // Naqd pul: 21 000 UZS (green)
   // Dollar: 0 USD (blue)
   const wallets = [
-    { id: uuidv4(), user_id: userId, name: 'Investitsiya', type: 'invest', balance: 13677.62, currency: 'UZS', color: '#7a5af8', card_number_last4: null, is_default: 0 },
+    { id: uuidv4(), user_id: userId, name: 'Investitsiya', type: 'invest', balance: 0, currency: 'UZS', color: '#7a5af8', card_number_last4: null, is_default: 0 },
     { id: uuidv4(), user_id: userId, name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', card_number_last4: '8600', is_default: 1 },
-    { id: uuidv4(), user_id: userId, name: 'Naqd pul', type: 'cash', balance: 21000, currency: 'UZS', color: '#38a169', card_number_last4: null, is_default: 0 },
+    { id: uuidv4(), user_id: userId, name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', card_number_last4: null, is_default: 0 },
     { id: uuidv4(), user_id: userId, name: 'Dollar', type: 'visa', balance: 0, currency: 'USD', color: '#3182ce', card_number_last4: '4100', is_default: 0 }
   ];
 
@@ -245,100 +255,6 @@ export function createDefaultDataForUser(userId: string) {
     VALUES (@id, @user_id, @name, @type, @icon, @color, @budget_limit)
   `);
   categories.forEach(c => insertCategory.run(c));
-
-  // 3. Transactions matching screenshot
-  const initialTxs = [
-    {
-      id: uuidv4(),
-      user_id: userId,
-      balance_id: wallets[0].id, // Investitsiya
-      category_id: categories[0].id,
-      amount: 166779,
-      type: 'expense',
-      description: 'Balans to\'g\'rilandi',
-      category_label: 'Balansni o\'zgartirish • Investitsiya',
-      time_str: '11:17',
-      date: new Date().toISOString()
-    },
-    {
-      id: uuidv4(),
-      user_id: userId,
-      balance_id: wallets[1].id, // Asosiy karta
-      category_id: categories[1].id,
-      amount: 13212,
-      type: 'expense',
-      description: 'IYB MOBILE PURSE',
-      category_label: 'Jamg\'arma va investitsiyalar • Asosiy karta',
-      time_str: '11:15',
-      date: new Date().toISOString()
-    },
-    {
-      id: uuidv4(),
-      user_id: userId,
-      balance_id: wallets[1].id, // Asosiy karta
-      category_id: categories[2].id,
-      amount: 166788,
-      type: 'expense',
-      description: 'OOO KARONA',
-      category_label: 'Kredit va Nasiya savdo • Asosiy karta',
-      time_str: '11:13',
-      date: new Date().toISOString()
-    },
-    {
-      id: uuidv4(),
-      user_id: userId,
-      balance_id: wallets[1].id, // Asosiy karta
-      category_id: categories[3].id,
-      amount: 180000,
-      type: 'income',
-      description: 'AIT IPAK YULI BANKI CHILONZOR F',
-      category_label: 'Aniqlanmagan • Asosiy karta',
-      time_str: '11:13',
-      date: new Date().toISOString()
-    },
-    {
-      id: uuidv4(),
-      user_id: userId,
-      balance_id: wallets[2].id, // Naqd pul
-      category_id: categories[4].id,
-      amount: 10000,
-      type: 'expense',
-      description: 'qisqasi o\'ttiz ming so\'m qarzimni to\'ladim do\'kondan unga anava sotib olganim naushnik sotib olgani...',
-      category_label: 'Kiyim-kechak • Naqd pul',
-      time_str: '11:03',
-      date: new Date().toISOString()
-    },
-    {
-      id: uuidv4(),
-      user_id: userId,
-      balance_id: wallets[2].id, // Naqd pul
-      category_id: categories[5].id,
-      amount: 30000,
-      type: 'expense',
-      description: 'qisqasi o\'ttiz ming so\'m qarzimni to\'ladim...',
-      category_label: 'Qarzlar • Naqd pul',
-      time_str: '11:03',
-      date: new Date().toISOString()
-    },
-    {
-      id: uuidv4(),
-      user_id: userId,
-      balance_id: wallets[2].id, // Naqd pul
-      category_id: categories[6].id,
-      amount: 61000,
-      type: 'income',
-      description: '61 000 so\'m naqd pul balansga qo\'sh',
-      category_label: 'Boshqa daromadlar • Naqd pul',
-      time_str: '08:54',
-      date: new Date().toISOString()
-    }
-  ];
-
-  const insertTx = db.prepare(`
-    INSERT INTO transactions (id, user_id, balance_id, category_id, amount, type, description, category_label, time_str, date)
-    VALUES (@id, @user_id, @balance_id, @category_id, @amount, @type, @description, @category_label, @time_str, @date)
-  `);
-  initialTxs.forEach(tx => insertTx.run(tx));
 }
 
 export function addTransaction(params: {
@@ -592,4 +508,43 @@ export function getFinancialSummary(userId: string, period: 'week' | 'month' | '
     dailyPoints,
     period
   };
+}
+
+export interface ChatMessageRecord {
+  id: string;
+  user_id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  transaction_data?: string | null;
+  created_at?: string;
+}
+
+export function getChatMessages(userId: string): ChatMessageRecord[] {
+  try {
+    return db.prepare('SELECT * FROM chat_messages WHERE user_id = ? ORDER BY created_at ASC').all(userId) as ChatMessageRecord[];
+  } catch (err: any) {
+    console.error('getChatMessages error:', err.message);
+    return [];
+  }
+}
+
+export function saveChatMessage(userId: string, sender: 'user' | 'ai', text: string, txData?: any): ChatMessageRecord {
+  const id = uuidv4();
+  const txDataStr = txData ? JSON.stringify(txData) : null;
+  db.prepare(`
+    INSERT INTO chat_messages (id, user_id, sender, text, transaction_data, created_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+  `).run(id, userId, sender, text, txDataStr);
+
+  return { id, user_id: userId, sender, text, transaction_data: txDataStr, created_at: new Date().toISOString() };
+}
+
+export function resetAllBalancesAndTransactions(userId?: string) {
+  if (userId) {
+    db.prepare('UPDATE wallets SET balance = 0 WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM transactions WHERE user_id = ?').run(userId);
+  } else {
+    db.prepare('UPDATE wallets SET balance = 0').run();
+    db.prepare('DELETE FROM transactions').run();
+  }
 }

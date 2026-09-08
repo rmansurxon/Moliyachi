@@ -16,7 +16,7 @@ export function triggerHaptic(type = 'light') {
     }
     catch { }
 }
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api');
 export const api = {
     // Auth & Profile
     async getUser() {
@@ -181,11 +181,26 @@ export const api = {
         return res.json();
     },
     // AI Chat & Speech-to-Expense
-    async sendAIChat(message) {
+    async getChatHistory() {
+        try {
+            const res = await fetch(`${API_BASE}/ai/chat/history`);
+            return await res.json();
+        }
+        catch {
+            return { success: false, messages: [] };
+        }
+    },
+    async sendAIChat(message, history) {
         const res = await fetch(`${API_BASE}/ai/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message, history })
+        });
+        return res.json();
+    },
+    async resetData() {
+        const res = await fetch(`${API_BASE}/system/reset-data`, {
+            method: 'POST'
         });
         return res.json();
     },

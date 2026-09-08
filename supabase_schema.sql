@@ -134,10 +134,27 @@ CREATE TABLE IF NOT EXISTS app_texts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 10. CHAT_MESSAGES (AI CHAT DOIMIY TARIXI)
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    text TEXT NOT NULL,
+    transaction_data TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Barcha jadvallarda RLS cheklovini o'chirish (anon kalit to'liq ishlashi uchun)
 ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE wallets DISABLE ROW LEVEL SECURITY;
 ALTER TABLE categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE debts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE goals DISABLE ROW LEVEL SECURITY;
+ALTER TABLE vouchers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE articles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE app_texts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE debts DISABLE ROW LEVEL SECURITY;
 ALTER TABLE goals DISABLE ROW LEVEL SECURITY;
@@ -206,3 +223,9 @@ VALUES
     ('art-1', '50/30/20 Qoidasi: Maoshingizni qanday to''g''ri taqsimlash kerak?', 'Moliya Savodxonligi', '4 daqiqa', 'Daromadingizni 50% zaruriy xarajatlarga, 30% orzularga va 20% jamg''armaga ajratish uslubi.', 'Moliya savodxonligining eng mashhur va samarali qoidalaridan biri...', 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?auto=format&fit=crop&w=600&q=80', CURRENT_DATE),
     ('art-2', 'Kundalik xarajatlarni hisobga olib borish nega muhim?', 'Tejamkorlik', '3 daqiqa', 'Kichik mayda xarajatlar oy oxirida katta summaga aylanishi mumkin.', 'Har bir xarajatni qayd etib borish pul ustidan 100% nazorat o''rnatishga yordam beradi...', 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80', CURRENT_DATE)
 ON CONFLICT (id) DO NOTHING;
+
+-- ==============================================================================
+-- BALANSLARNI 0 GA TUSHIRISH VA TEST MA'LUMOTLARNI TOZALASH (SHAXSIY HISOB UCHUN)
+-- ==============================================================================
+UPDATE wallets SET balance = 0;
+DELETE FROM transactions;

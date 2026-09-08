@@ -1,30 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { User, Wallet, Category, Transaction, Debt, Goal, Voucher, Article, FinancialSummary } from './types';
+import { User, Wallet, Category, Transaction, Debt, Goal, FinancialSummary } from './types';
 import { api, tg } from './api';
 
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { AddTransactionModal } from './components/AddTransactionModal';
-import { NotificationsModal } from './components/NotificationsModal';
 import { LockScreen } from './components/LockScreen';
 
 import { HomeView } from './views/HomeView';
 import { ChatView } from './views/ChatView';
-import { ScanView } from './views/ScanView';
 import { StatisticsView } from './views/StatisticsView';
 import { ReportsView } from './views/ReportsView';
-import { OyYakuniView } from './views/OyYakuniView';
 import { DebtsView } from './views/DebtsView';
 import { GoalsView } from './views/GoalsView';
 import { BalancesView } from './views/BalancesView';
 import { CategoriesView } from './views/CategoriesView';
-import { GamificationView } from './views/GamificationView';
-import { TogetherView } from './views/TogetherView';
-import { ArticlesView } from './views/ArticlesView';
 import { SettingsView } from './views/SettingsView';
-import { SubscriptionView } from './views/SubscriptionView';
-import { MoreSectionsView } from './views/MoreSectionsView';
 
 export const App: React.FC = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -37,16 +29,11 @@ export const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [vouchers, setVouchers] = useState<Voucher[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showPaywall, setShowPaywall] = useState(false);
-  const [showMonthlyWrap, setShowMonthlyWrap] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
 
   // Initialize Telegram WebApp
@@ -79,15 +66,13 @@ export const App: React.FC = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [u, w, c, t, d, g, gam, art, s] = await Promise.all([
+      const [u, w, c, t, d, g, s] = await Promise.all([
         api.getUser(),
         api.getWallets(),
         api.getCategories(),
         api.getTransactions(),
         api.getDebts(),
         api.getGoals(),
-        api.getGamificationStatus(),
-        api.getArticles(),
         api.getSummary('month')
       ]);
 
@@ -97,38 +82,41 @@ export const App: React.FC = () => {
       setTransactions(t);
       setDebts(d);
       setGoals(g);
-      setVouchers(gam.vouchers || []);
-      setArticles(art);
       setSummary(s);
 
-      // Check PIN lock
-      if (u.pin_code && !sessionStorage.getItem('unlocked')) {
+      // Check pin lock
+      if (u?.pin_code && !isLocked) {
         setIsLocked(true);
       }
     } catch (err) {
-      console.error('Error loading data:', err);
+      console.error('Data load error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleToggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
   };
 
-  const handleAddTransaction = async (txParams: any) => {
-    await api.createTransaction(txParams);
-    await loadAllData();
+  const handleAddTransaction = async (txData: any) => {
+    try {
+      await api.createTransaction(txData);
+      await loadAllData();
+      setShowAddModal(false);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    await api.deleteTransaction(id);
-    await loadAllData();
-  };
-
-  const handleUnlock = () => {
-    sessionStorage.setItem('unlocked', 'true');
-    setIsLocked(false);
+    try {
+      await api.deleteTransaction(id);
+      await loadAllData();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   if (loading || !user) {
@@ -142,9 +130,13 @@ export const App: React.FC = () => {
     );
   }
 
-  // If locked with PIN
-  if (isLocked && user.pin_code) {
-    return <LockScreen correctPin={user.pin_code} onUnlock={handleUnlock} />;
+  if (isLocked && user?.pin_code) {
+    return (
+      <LockScreen
+        correctPin={user.pin_code}
+        onUnlock={() => setIsLocked(false)}
+      />
+    );
   }
 
   return (
@@ -161,8 +153,6 @@ export const App: React.FC = () => {
         {/* Top Header */}
         <Header
           user={user}
-          onOpenNotifications={() => setShowNotifications(true)}
-          onOpenGamification={() => setCurrentTab('gamification')}
           onOpenSettings={() => setCurrentTab('settings')}
         />
 
@@ -177,7 +167,7 @@ export const App: React.FC = () => {
               onOpenAddModal={() => setShowAddModal(true)}
               onNavigateTab={(tab) => setCurrentTab(tab)}
               onDeleteTransaction={handleDeleteTransaction}
-              onOpenMonthlyWrap={() => setShowMonthlyWrap(true)}
+              onOpenMonthlyWrap={() => {}}
             />
           )}
 
@@ -185,17 +175,8 @@ export const App: React.FC = () => {
             <ChatView onTransactionCreated={loadAllData} />
           )}
 
-          {currentTab === 'scan' && (
-            <ScanView
-              wallets={wallets}
-              categories={categories}
-              onTransactionCreated={loadAllData}
-              onNavigateHome={() => setCurrentTab('home')}
-            />
-          )}
-
           {currentTab === 'stats' && (
-            <StatisticsView onOpenMonthlyWrap={() => setShowMonthlyWrap(true)} />
+            <StatisticsView onOpenMonthlyWrap={() => {}} />
           )}
 
           {currentTab === 'debts' && (
@@ -222,35 +203,19 @@ export const App: React.FC = () => {
             <ReportsView transactions={transactions} />
           )}
 
-          {currentTab === 'gamification' && (
-            <GamificationView user={user} vouchers={vouchers} />
-          )}
-
-          {currentTab === 'together' && <TogetherView />}
-
-          {currentTab === 'articles' && <ArticlesView articles={articles} />}
-
           {currentTab === 'settings' && (
             <SettingsView
               user={user}
               theme={theme}
               onToggleTheme={handleToggleTheme}
-              onOpenPaywall={() => setShowPaywall(true)}
+              onOpenPaywall={() => {}}
               onReloadUser={loadAllData}
             />
-          )}
-
-          {currentTab === 'more' && (
-            <MoreSectionsView onNavigate={(view) => {
-              if (view === 'oy-yakuni') setShowMonthlyWrap(true);
-              else if (view === 'paywall') setShowPaywall(true);
-              else setCurrentTab(view as TabType);
-            }} />
           )}
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation (only visible on mobile screens) */}
+      {/* Mobile Bottom Navigation */}
       <div className="md:hidden">
         <BottomNav
           currentTab={currentTab}
@@ -267,22 +232,6 @@ export const App: React.FC = () => {
         categories={categories}
         onSubmit={handleAddTransaction}
       />
-
-      {/* Notifications Modal */}
-      <NotificationsModal
-        isOpen={showNotifications}
-        onClose={() => setShowNotifications(false)}
-      />
-
-      {/* Monthly Wrap Stories Modal */}
-      {showMonthlyWrap && (
-        <OyYakuniView onClose={() => setShowMonthlyWrap(false)} />
-      )}
-
-      {/* Subscription Paywall Modal */}
-      {showPaywall && (
-        <SubscriptionView onClose={() => setShowPaywall(false)} />
-      )}
     </div>
   );
 };

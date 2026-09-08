@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api, triggerHaptic } from '../api';
-import { Sparkles, Send, Mic, MicOff, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sparkles, Send, Mic, CheckCircle2, AlertCircle, Camera, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface Message {
@@ -16,21 +16,54 @@ interface ChatViewProps {
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      sender: 'ai',
-      text: "Assalomu alaykum! Men Hisobchi AI moliyaviy yordamchingizman. 🤖\n\nMenga xarajat yoki daromadlaringizni yozing yoki mikrofonga gapiring (masalan: *\"Tushlikka 45 000 so'm\"* yoki *\"5 000 000 oylik tushdi\"*).",
-      time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [scanningReceipt, setScanningReceipt] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load persistent continuous chat history
+  useEffect(() => {
+    let isMounted = true;
+    async function loadHistory() {
+      try {
+        const res = await api.getChatHistory();
+        if (isMounted && res.success && Array.isArray(res.messages) && res.messages.length > 0) {
+          const loaded = res.messages.map((m: any) => ({
+            id: m.id || String(Math.random()),
+            sender: m.sender,
+            text: m.text,
+            time: m.created_at
+              ? new Date(m.created_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+              : '',
+            transaction: m.transaction_data ? (typeof m.transaction_data === 'string' ? JSON.parse(m.transaction_data) : m.transaction_data) : undefined
+          }));
+          setMessages(loaded);
+        } else if (isMounted) {
+          setMessages([
+            {
+              id: 'initial',
+              sender: 'ai',
+              text: "Assalomu alaykum! Men sizning shaxsiy moliyaviy yordamchingizman. 🤖\n\nXarajat yoki daromadingizni yozing yoki ovoz bilan gapiring (masalan: *\"Tushlik 45 000 so'm\"* yoki *\"5 000 000 oylik tushdi\"*). Shuningdek chek rasmini ham yuborishingiz mumkin.",
+              time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+            }
+          ]);
+        }
+      } catch (err) {
+        console.error('History load error:', err);
+      } finally {
+        if (isMounted) setHistoryLoaded(true);
+      }
+    }
+    loadHistory();
+    return () => { isMounted = false; };
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -112,6 +145,66 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
     "Bu oy eng ko'p nimaga ketdi?"
   ];
 
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setScanningReceipt(true);
+    triggerHaptic('medium');
+
+    const tempId = String(Date.now());
+    const uploadingMsg: Message = {
+      id: tempId,
+      sender: 'user',
+      text: `📷 Chek yuklandi: ${file.name}`,
+      time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, uploadingMsg]);
+
+    try {
+      const res = await api.scanReceipt(file);
+      if (res.success && res.transaction) {
+        triggerHaptic('success');
+        confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 } });
+        onTransactionCreated?.();
+
+        const replyMsg: Message = {
+          id: String(Date.now() + 1),
+          sender: 'ai',
+          text: `🧾 **Chek o'qildi va xarajat qayd etildi!**\n\n` +
+            `🏪 **Do'kon:** ${res.extracted?.merchant || 'Do\'kon xaridi'}\n` +
+            `💰 **Summa:** **${res.transaction.amount?.toLocaleString('uz-UZ')} so'm**\n` +
+            `🏷 **Kategoriya:** ${res.extracted?.category || 'Xarajat'}`,
+          time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+          transaction: res.transaction
+        };
+        setMessages(prev => [...prev, replyMsg]);
+      } else {
+        const replyMsg: Message = {
+          id: String(Date.now() + 1),
+          sender: 'ai',
+          text: res.message || "Chekni tahlil qilib bo'lmadi. Summani matn yoki ovoz bilan yozing.",
+          time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, replyMsg]);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: String(Date.now() + 1),
+          sender: 'ai',
+          text: "Chekni o'qishda xatolik yuz berdi. Qaytadan urinib ko'ring.",
+          time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    } finally {
+      setScanningReceipt(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || input).trim();
     if (!text || loading) return;
@@ -125,12 +218,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
       time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
     };
 
+    const currentHistory = [...messages, userMsg].slice(-10).map(m => ({
+      sender: m.sender,
+      text: m.text
+    }));
+
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setLoading(true);
 
     try {
-      const res = await api.sendAIChat(text);
+      const res = await api.sendAIChat(text, currentHistory);
 
       if (res.transaction) {
         triggerHaptic('success');
@@ -154,7 +252,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
         {
           id: String(Date.now() + 1),
           sender: 'ai',
-          text: "Kechirasiz, tizimda vaqtinchalik xatolik yuz berdi. Qaytadan urinib ko'ring.",
+          text: "Kechirasiz, vaqtinchalik xatolik yuz berdi. Qaytadan urinib ko'ring.",
           time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -176,12 +274,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
           </div>
           <div>
             <h3 className="text-xs font-bold text-white">Hisobchi AI Assistant</h3>
-            <p className="text-[10px] text-[#29c184] font-medium">Onlayn • O'zbek tili tahlilchisi</p>
+            <p className="text-[10px] text-[#29c184] font-medium">Doimiy suhbat • Tarix saqlanadi</p>
           </div>
         </div>
 
         <div className="text-[10px] px-2 py-0.5 rounded-full bg-[#29c184]/15 text-[#29c184] font-bold">
-          AI v2.4 Live
+          AI Faol
         </div>
       </div>
 
@@ -206,7 +304,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
                 {m.transaction && (
                   <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center gap-2 text-xs font-bold text-[#29c184]">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Hamyon balansi yangilandi (+15 XP)</span>
+                    <span>Hamyon balansi muvaffaqiyatli yangilandi</span>
                   </div>
                 )}
               </div>
@@ -215,11 +313,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
           );
         })}
 
-        {loading && (
-          <div className="flex items-center gap-2 p-3 rounded-2xl bg-[#1c2733] max-w-[70px] border border-[#263445]">
-            <span className="w-2 h-2 rounded-full bg-[#29c184] animate-bounce"></span>
-            <span className="w-2 h-2 rounded-full bg-[#29c184] animate-bounce [animation-delay:0.2s]"></span>
-            <span className="w-2 h-2 rounded-full bg-[#29c184] animate-bounce [animation-delay:0.4s]"></span>
+        {(loading || scanningReceipt) && (
+          <div className="flex items-center gap-2 p-3 rounded-2xl bg-[#1c2733] max-w-[120px] border border-[#263445]">
+            <Loader2 className="w-4 h-4 text-[#29c184] animate-spin" />
+            <span className="text-xs text-[#899098]">{scanningReceipt ? 'Chek tahlili...' : 'O\'ylanmoqda...'}</span>
           </div>
         )}
 
@@ -249,7 +346,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
         </div>
       </div>
 
-      {/* Input container with Real Speech Recognition & Send */}
+      {/* Hidden file input for Receipt scanning */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleReceiptUpload}
+        className="hidden"
+      />
+
+      {/* Input container with Speech, Camera & Send */}
       <div className="relative pt-1">
         {isListening ? (
           <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-[#29c184]/20 border border-[#29c184] animate-pulse">
@@ -281,6 +388,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
               placeholder="Masalan: Tushlik 45000 so'm..."
               className="flex-1 px-4 py-3 rounded-2xl bg-[#1c2733] border border-[#263445] text-sm text-white focus:outline-none focus:border-[#29c184] shadow-inner"
             />
+
+            {/* Camera / Receipt Scan button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-11 h-11 rounded-2xl bg-[#1c2733] border border-[#263445] flex items-center justify-center text-[#899098] hover:text-[#29c184] hover:border-[#29c184] transition-all cursor-pointer shrink-0"
+              title="Chek rasmini yuklash"
+            >
+              <Camera className="w-5 h-5" />
+            </button>
 
             {/* Real Mic button */}
             <button

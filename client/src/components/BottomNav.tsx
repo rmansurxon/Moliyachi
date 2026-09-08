@@ -1,8 +1,8 @@
 import React from 'react';
 import { triggerHaptic } from '../api';
-import { Home, Sparkles, Plus, BarChart3, LayoutGrid } from 'lucide-react';
+import { Home, Sparkles, Plus, BarChart3, HandCoins } from 'lucide-react';
 
-export type TabType = 'home' | 'chat' | 'stats' | 'more' | 'scan' | 'debts' | 'goals' | 'balances' | 'categories' | 'reports' | 'oy-yakuni' | 'settings' | 'gamification' | 'articles' | 'together';
+export type TabType = 'home' | 'chat' | 'stats' | 'debts' | 'goals' | 'balances' | 'categories' | 'reports' | 'settings';
 
 interface BottomNavProps {
   currentTab: TabType;
@@ -16,7 +16,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onChangeTab, o
     { id: 'chat', label: 'AI Chat', icon: Sparkles, badge: 'AI' },
     { id: 'add', label: "Qo'shish", icon: Plus, isAction: true },
     { id: 'stats', label: 'Statistika', icon: BarChart3 },
-    { id: 'more', label: "Bo'limlar", icon: LayoutGrid }
+    { id: 'debts', label: 'Qarzlar', icon: HandCoins }
   ];
 
   return (

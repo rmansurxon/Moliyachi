@@ -210,11 +210,27 @@ export const api = {
   },
 
   // AI Chat & Speech-to-Expense
-  async sendAIChat(message: string) {
+  async getChatHistory() {
+    try {
+      const res = await fetch(`${API_BASE}/ai/chat/history`);
+      return await res.json();
+    } catch {
+      return { success: false, messages: [] };
+    }
+  },
+
+  async sendAIChat(message: string, history?: any[]) {
     const res = await fetch(`${API_BASE}/ai/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message, history })
+    });
+    return res.json();
+  },
+
+  async resetData() {
+    const res = await fetch(`${API_BASE}/system/reset-data`, {
+      method: 'POST'
     });
     return res.json();
   },

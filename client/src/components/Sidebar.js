@@ -1,12 +1,13 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { triggerHaptic } from '../api';
-import { Home, Clock, Sparkles, LayoutGrid, Settings } from 'lucide-react';
+import { Home, Clock, Sparkles, HandCoins, CreditCard, Settings } from 'lucide-react';
 export const Sidebar = ({ currentTab, onChangeTab, className = '' }) => {
     const menuItems = [
         { id: 'home', label: 'Asosiy', icon: Home },
+        { id: 'chat', label: 'AI Yordamchi', icon: Sparkles },
         { id: 'stats', label: 'Statistika', icon: Clock },
-        { id: 'chat', label: 'AI chat', icon: Sparkles },
-        { id: 'more', label: "Ko'proq", icon: LayoutGrid },
+        { id: 'debts', label: 'Qarzlar', icon: HandCoins },
+        { id: 'balances', label: 'Hamyonlar', icon: CreditCard },
         { id: 'settings', label: 'Sozlamalar', icon: Settings }
     ];
     return (_jsxs("aside", { className: `w-56 shrink-0 bg-[#18222d] border-r border-[#222e3b] flex flex-col justify-between py-6 px-3 min-h-screen select-none ${className}`, children: [_jsx("div", { className: "space-y-2", children: menuItems.map((item) => {

@@ -5,7 +5,8 @@ import {
   Home,
   Clock,
   Sparkles,
-  LayoutGrid,
+  HandCoins,
+  CreditCard,
   Settings,
   ShieldCheck,
   ChevronRight
@@ -20,9 +21,10 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onChangeTab, className = '' }) => {
   const menuItems = [
     { id: 'home', label: 'Asosiy', icon: Home },
+    { id: 'chat', label: 'AI Yordamchi', icon: Sparkles },
     { id: 'stats', label: 'Statistika', icon: Clock },
-    { id: 'chat', label: 'AI chat', icon: Sparkles },
-    { id: 'more', label: "Ko'proq", icon: LayoutGrid },
+    { id: 'debts', label: 'Qarzlar', icon: HandCoins },
+    { id: 'balances', label: 'Hamyonlar', icon: CreditCard },
     { id: 'settings', label: 'Sozlamalar', icon: Settings }
   ];
 

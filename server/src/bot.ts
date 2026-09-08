@@ -1,9 +1,10 @@
 import { Telegraf, Markup } from 'telegraf';
-import { getOrCreateDefaultUser, getWallets, getCategories, addTransaction, getFinancialSummary, getDebts } from './db.js';
+import { getOrCreateDefaultUser, getWallets, getCategories, addTransaction, getFinancialSummary, getDebts, saveChatMessage } from './db.js';
 import { parseUzbekFinancialText, getAIConversationalReply, extractAmount } from './aiService.js';
 import { createWorker } from 'tesseract.js';
 import axios from 'axios';
 import { isOpenRouterConfigured, callOpenRouterAI } from './openrouter.js';
+import { isSupabaseActive, saveChatMessageToSupabase } from './supabase.js';
 
 export function createTelegramBot(token?: string, webAppUrl: string = 'https://dashboard.hisobchiai.uz') {
   if (!token) {
@@ -303,8 +304,14 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
 
     const parsed = parseUzbekFinancialText(text, categories);
 
+    // Save incoming user message to persistent continuous chat history
+    saveChatMessage(user.id, 'user', text);
+    if (isSupabaseActive()) {
+      saveChatMessageToSupabase(user.id, 'user', text).catch(() => {});
+    }
+
     if (parsed.isTransaction && parsed.amount > 0 && defaultWallet) {
-      addTransaction({
+      const savedTx = addTransaction({
         user_id: user.id,
         balance_id: defaultWallet.id,
         category_id: parsed.matchedCategoryId,
@@ -313,6 +320,12 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
         description: parsed.description,
         category_label: `${parsed.categoryName} • ${defaultWallet.name}`
       });
+
+      // Save bot confirmation to persistent chat history
+      saveChatMessage(user.id, 'ai', parsed.replyMessage, savedTx);
+      if (isSupabaseActive()) {
+        saveChatMessageToSupabase(user.id, 'ai', parsed.replyMessage, savedTx).catch(() => {});
+      }
 
       await ctx.reply(parsed.replyMessage, {
         parse_mode: 'Markdown',
@@ -338,6 +351,12 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
       if (!replyText) {
         const aiReply = getAIConversationalReply(text, categories, summary);
         replyText = aiReply.text;
+      }
+
+      // Save bot reply to persistent chat history
+      saveChatMessage(user.id, 'ai', replyText);
+      if (isSupabaseActive()) {
+        saveChatMessageToSupabase(user.id, 'ai', replyText).catch(() => {});
       }
 
       await ctx.reply(replyText, { parse_mode: 'Markdown' });

@@ -18,6 +18,9 @@ import {
   updateWallet,
   deleteWallet,
   transferBetweenWallets,
+  getChatMessages,
+  saveChatMessage,
+  resetAllBalancesAndTransactions,
   db
 } from './db.js';
 import { parseUzbekFinancialText, getAIConversationalReply, parseReceiptImageSimulation, extractAmount } from './aiService.js';
@@ -31,7 +34,10 @@ import {
   getTransactionsFromSupabase,
   getWalletsFromSupabase,
   getCategoriesFromSupabase,
-  insertTransactionToSupabase
+  insertTransactionToSupabase,
+  getChatMessagesFromSupabase,
+  saveChatMessageToSupabase,
+  resetSupabaseBalancesAndTransactions
 } from './supabase.js';
 import { isOpenRouterConfigured, callOpenRouterAI } from './openrouter.js';
 
@@ -437,12 +443,35 @@ app.get('/api/statistics/monthly-wrap', (req, res) => {
 });
 
 // --- AI ASSISTANT & CHAT ---
+app.get('/api/ai/chat/history', async (req, res) => {
+  const user = (req as any).user;
+  try {
+    let messages: any[] = [];
+    if (isSupabaseActive()) {
+      messages = await getChatMessagesFromSupabase(user.id);
+    }
+    if (!messages || messages.length === 0) {
+      messages = getChatMessages(user.id);
+    }
+    res.json({ success: true, messages });
+  } catch (err: any) {
+    console.error('Chat history error:', err.message);
+    res.json({ success: true, messages: [] });
+  }
+});
+
 app.post('/api/ai/chat', async (req, res) => {
   const user = (req as any).user;
   const { message, history } = req.body;
 
   if (!message) {
     return res.status(400).json({ success: false, message: 'Xabar kiritilmadi' });
+  }
+
+  // Save user message immediately to persistent history
+  saveChatMessage(user.id, 'user', message);
+  if (isSupabaseActive()) {
+    saveChatMessageToSupabase(user.id, 'user', message).catch(() => {});
   }
 
   const categories = getCategories(user.id);
@@ -499,6 +528,12 @@ app.post('/api/ai/chat', async (req, res) => {
     }
   }
 
+  // Save AI response to persistent history
+  saveChatMessage(user.id, 'ai', replyText, savedTx);
+  if (isSupabaseActive()) {
+    saveChatMessageToSupabase(user.id, 'ai', replyText, savedTx).catch(() => {});
+  }
+
   res.json({
     success: true,
     reply: replyText,
@@ -506,6 +541,21 @@ app.post('/api/ai/chat', async (req, res) => {
     parsed: parsedData,
     source: aiSource
   });
+});
+
+// --- RESET SYSTEM DATA (ZERO BALANCES & CLEAR TEST TRANSACTIONS) ---
+app.post('/api/system/reset-data', async (req, res) => {
+  const user = (req as any).user;
+  try {
+    resetAllBalancesAndTransactions(user.id);
+    if (isSupabaseActive()) {
+      await resetSupabaseBalancesAndTransactions(user.id);
+    }
+    res.json({ success: true, message: 'Barcha balanslar 0 ga keltirildi va test tranzaksiyalar tozalandi' });
+  } catch (err: any) {
+    console.error('Reset error:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 
