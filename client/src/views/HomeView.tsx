@@ -18,7 +18,8 @@ import {
   HelpCircle,
   Shirt,
   HandCoins,
-  DollarSign
+  DollarSign,
+  Edit3
 } from 'lucide-react';
 
 interface HomeViewProps {
@@ -30,6 +31,7 @@ interface HomeViewProps {
   onNavigateTab: (tab: any) => void;
   onDeleteTransaction: (id: string) => void;
   onOpenMonthlyWrap: () => void;
+  onEditTransaction?: (tx: Transaction) => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -38,6 +40,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   summary,
   onOpenAddModal,
   onNavigateTab,
+  onEditTransaction,
 }) => {
   const [showBalance, setShowBalance] = useState(true);
 
@@ -265,15 +268,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   return (
                     <div
                       key={tx.id}
-                      className="py-3 flex items-center justify-between hover:bg-white/2 rounded-xl px-2 transition-colors group"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        onEditTransaction?.(tx);
+                      }}
+                      className="py-3 flex items-center justify-between hover:bg-white/5 active:bg-white/10 rounded-xl px-2.5 transition-all cursor-pointer group"
                     >
                       <div className="flex items-center gap-3 min-w-0 pr-4">
-                        <div className="w-10 h-10 rounded-2xl bg-[#233140] flex items-center justify-center shrink-0 shadow-sm">
+                        <div className="w-10 h-10 rounded-2xl bg-[#233140] flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                           {getTxIcon(tx)}
                         </div>
 
                         <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-white truncate max-w-sm">
+                          <h4 className="text-xs font-bold text-white truncate max-w-sm group-hover:text-[#29c184] transition-colors">
                             {tx.description}
                           </h4>
                           <p className="text-[11px] text-[#8b9aa8] truncate mt-0.5">
@@ -282,18 +289,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <p
-                          className={`text-xs font-black font-mono ${
-                            isExpense ? 'text-[#f0646e]' : 'text-[#23a887]'
-                          }`}
-                        >
-                          {isExpense ? '-' : '+'}
-                          {tx.amount.toLocaleString('uz-UZ')} UZS
-                        </p>
-                        <p className="text-[10px] text-[#8b9aa8] mt-0.5">
-                          {tx.time_str || ''}
-                        </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <p
+                            className={`text-xs font-black font-mono ${
+                              isExpense ? 'text-[#f0646e]' : 'text-[#23a887]'
+                            }`}
+                          >
+                            {isExpense ? '-' : '+'}
+                            {tx.amount.toLocaleString('uz-UZ')} UZS
+                          </p>
+                          <p className="text-[10px] text-[#8b9aa8] mt-0.5">
+                            {tx.time_str || ''}
+                          </p>
+                        </div>
+                        <div className="w-7 h-7 rounded-lg bg-[#213040] opacity-0 group-hover:opacity-100 flex items-center justify-center text-[#8b9aa8] hover:text-white transition-all">
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </div>
                       </div>
                     </div>
                   );

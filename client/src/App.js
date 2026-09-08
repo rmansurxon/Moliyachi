@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { AddTransactionModal } from './components/AddTransactionModal';
+import { EditTransactionModal } from './components/EditTransactionModal';
 import { LockScreen } from './components/LockScreen';
 import { HomeView } from './views/HomeView';
 import { ChatView } from './views/ChatView';
@@ -92,6 +93,7 @@ export const App = () => {
     const [isSyncing, setIsSyncing] = useState(false);
     // Modals
     const [showAddModal, setShowAddModal] = useState(false);
+    const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState(null);
     const [isLocked, setIsLocked] = useState(false);
     // Initialize Telegram WebApp
     useEffect(() => {
@@ -177,6 +179,15 @@ export const App = () => {
             console.error(err);
         }
     };
+    const handleUpdateTransaction = async (id, updates) => {
+        try {
+            await api.updateTransaction(id, updates);
+            await loadAllData();
+        }
+        catch (err) {
+            console.error('Update transaction error:', err);
+        }
+    };
     const handleDeleteTransaction = async (id) => {
         try {
             await api.deleteTransaction(id);
@@ -189,6 +200,6 @@ export const App = () => {
     if (isLocked && user?.pin_code) {
         return (_jsx(LockScreen, { correctPin: user.pin_code, onUnlock: () => setIsLocked(false) }));
     }
-    return (_jsxs("div", { className: "min-h-screen bg-[#18222d] text-[#fdfdfd] flex", children: [_jsx(Sidebar, { currentTab: currentTab, onChangeTab: (tab) => setCurrentTab(tab), className: "hidden md:flex" }), _jsxs("div", { className: "flex-1 flex flex-col min-w-0 min-h-screen bg-[#18222d]", children: [_jsx(Header, { user: user, onOpenSettings: () => setCurrentTab('settings') }), isSyncing && (_jsx("div", { className: "h-0.5 bg-[#29c184]/40 w-full overflow-hidden", children: _jsx("div", { className: "h-full bg-[#29c184] animate-pulse", style: { width: '100%' } }) })), _jsxs("main", { className: "flex-1 overflow-y-auto pb-20 md:pb-8", children: [currentTab === 'home' && (_jsx(HomeView, { user: user, wallets: wallets, transactions: transactions, summary: summary, onOpenAddModal: () => setShowAddModal(true), onNavigateTab: (tab) => setCurrentTab(tab), onDeleteTransaction: handleDeleteTransaction, onOpenMonthlyWrap: () => { } })), currentTab === 'chat' && (_jsx(ChatView, { onTransactionCreated: loadAllData })), currentTab === 'stats' && (_jsx(StatisticsView, { onOpenMonthlyWrap: () => { } })), currentTab === 'debts' && (_jsx(DebtsView, { debts: debts, onReload: loadAllData })), currentTab === 'goals' && (_jsx(GoalsView, { goals: goals, wallets: wallets, onReload: loadAllData })), currentTab === 'balances' && (_jsx(BalancesView, { wallets: wallets, onReload: loadAllData, onOpenTransferModal: () => setShowAddModal(true) })), currentTab === 'categories' && (_jsx(CategoriesView, { categories: categories, onReload: loadAllData })), currentTab === 'reports' && (_jsx(ReportsView, { transactions: transactions })), currentTab === 'settings' && (_jsx(SettingsView, { user: user, theme: theme, onToggleTheme: handleToggleTheme, onOpenPaywall: () => { }, onReloadUser: loadAllData }))] })] }), _jsx("div", { className: "md:hidden", children: _jsx(BottomNav, { currentTab: currentTab, onChangeTab: (tab) => setCurrentTab(tab), onOpenAddModal: () => setShowAddModal(true) }) }), _jsx(AddTransactionModal, { isOpen: showAddModal, onClose: () => setShowAddModal(false), wallets: wallets, categories: categories, onSubmit: handleAddTransaction })] }));
+    return (_jsxs("div", { className: "min-h-screen bg-[#18222d] text-[#fdfdfd] flex", children: [_jsx(Sidebar, { currentTab: currentTab, onChangeTab: (tab) => setCurrentTab(tab), className: "hidden md:flex" }), _jsxs("div", { className: "flex-1 flex flex-col min-w-0 min-h-screen bg-[#18222d]", children: [_jsx(Header, { user: user, onOpenSettings: () => setCurrentTab('settings') }), isSyncing && (_jsx("div", { className: "h-0.5 bg-[#29c184]/40 w-full overflow-hidden", children: _jsx("div", { className: "h-full bg-[#29c184] animate-pulse", style: { width: '100%' } }) })), _jsxs("main", { className: "flex-1 overflow-y-auto pb-20 md:pb-8", children: [currentTab === 'home' && (_jsx(HomeView, { user: user, wallets: wallets, transactions: transactions, summary: summary, onOpenAddModal: () => setShowAddModal(true), onNavigateTab: (tab) => setCurrentTab(tab), onDeleteTransaction: handleDeleteTransaction, onEditTransaction: (tx) => setSelectedTransactionForEdit(tx), onOpenMonthlyWrap: () => { } })), currentTab === 'chat' && (_jsx(ChatView, { onTransactionCreated: loadAllData })), currentTab === 'stats' && (_jsx(StatisticsView, { onOpenMonthlyWrap: () => { } })), currentTab === 'debts' && (_jsx(DebtsView, { debts: debts, onReload: loadAllData })), currentTab === 'goals' && (_jsx(GoalsView, { goals: goals, wallets: wallets, onReload: loadAllData })), currentTab === 'balances' && (_jsx(BalancesView, { wallets: wallets, onReload: loadAllData, onOpenTransferModal: () => setShowAddModal(true) })), currentTab === 'categories' && (_jsx(CategoriesView, { categories: categories, onReload: loadAllData })), currentTab === 'reports' && (_jsx(ReportsView, { transactions: transactions, onEditTransaction: (tx) => setSelectedTransactionForEdit(tx) })), currentTab === 'settings' && (_jsx(SettingsView, { user: user, theme: theme, onToggleTheme: handleToggleTheme, onOpenPaywall: () => { }, onReloadUser: loadAllData }))] })] }), _jsx("div", { className: "md:hidden", children: _jsx(BottomNav, { currentTab: currentTab, onChangeTab: (tab) => setCurrentTab(tab), onOpenAddModal: () => setShowAddModal(true) }) }), _jsx(AddTransactionModal, { isOpen: showAddModal, onClose: () => setShowAddModal(false), wallets: wallets, categories: categories, onSubmit: handleAddTransaction }), _jsx(EditTransactionModal, { isOpen: !!selectedTransactionForEdit, onClose: () => setSelectedTransactionForEdit(null), transaction: selectedTransactionForEdit, wallets: wallets, categories: categories, onUpdate: handleUpdateTransaction, onDelete: handleDeleteTransaction })] }));
 };
 export default App;

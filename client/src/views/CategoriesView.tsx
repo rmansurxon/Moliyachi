@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Category } from '../types';
 import { api, triggerHaptic } from '../api';
 import { Icon } from '../components/Icon';
-import { Plus, Tag, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { Plus, Tag, ArrowDownRight, ArrowUpRight, Edit3 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { EditCategoryModal } from '../components/EditCategoryModal';
 
 interface CategoriesViewProps {
   categories: Category[];
@@ -13,6 +14,7 @@ interface CategoriesViewProps {
 export const CategoriesView: React.FC<CategoriesViewProps> = ({ categories, onReload }) => {
   const [tab, setTab] = useState<'expense' | 'income'>('expense');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -20,6 +22,16 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ categories, onRe
   const [color, setColor] = useState('#29c184');
   const [budgetLimitStr, setBudgetLimitStr] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleUpdateCategory = async (id: string, updates: Partial<Category>) => {
+    await api.updateCategory(id, updates);
+    onReload();
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    await api.deleteCategory(id);
+    onReload();
+  };
 
   const filtered = categories.filter((c) => c.type === tab);
 
@@ -116,25 +128,34 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ categories, onRe
         {filtered.map((cat) => (
           <div
             key={cat.id}
-            className="p-3.5 rounded-2xl bg-[#213040] light:bg-white border border-[#354454] light:border-[#eaecf0] shadow-sm flex items-center gap-3"
+            onClick={() => {
+              triggerHaptic('light');
+              setSelectedCategory(cat);
+            }}
+            className="p-3.5 rounded-2xl bg-[#213040] light:bg-white border border-[#354454] light:border-[#eaecf0] hover:border-[#29c184]/50 shadow-sm flex items-center justify-between cursor-pointer transition-all group"
           >
-            <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-sm"
-              style={{ backgroundColor: cat.color }}
-            >
-              <Icon name={cat.icon} size={18} />
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-sm group-hover:scale-105 transition-transform"
+                style={{ backgroundColor: cat.color }}
+              >
+                <Icon name={cat.icon} size={18} />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-xs font-bold text-white light:text-[#1d2939] truncate group-hover:text-[#29c184] transition-colors">
+                  {cat.name}
+                </h4>
+                {cat.budget_limit > 0 ? (
+                  <p className="text-[10px] text-[#29c184] font-medium truncate">
+                    Limit: {cat.budget_limit.toLocaleString('uz-UZ')}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-[#899098]">Cheklovsiz</p>
+                )}
+              </div>
             </div>
-            <div className="min-w-0">
-              <h4 className="text-xs font-bold text-white light:text-[#1d2939] truncate">
-                {cat.name}
-              </h4>
-              {cat.budget_limit > 0 ? (
-                <p className="text-[10px] text-[#29c184] font-medium truncate">
-                  Limit: {cat.budget_limit.toLocaleString('uz-UZ')}
-                </p>
-              ) : (
-                <p className="text-[10px] text-[#899098]">Cheklovsiz</p>
-              )}
+            <div className="w-6 h-6 rounded-md bg-[#19232e] opacity-0 group-hover:opacity-100 flex items-center justify-center text-[#899098] hover:text-white transition-all shrink-0">
+              <Edit3 className="w-3 h-3" />
             </div>
           </div>
         ))}
@@ -224,6 +245,15 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ categories, onRe
           </div>
         </div>
       )}
+
+      {/* Edit Category Modal */}
+      <EditCategoryModal
+        isOpen={!!selectedCategory}
+        onClose={() => setSelectedCategory(null)}
+        category={selectedCategory}
+        onUpdate={handleUpdateCategory}
+        onDelete={handleDeleteCategory}
+      />
     </div>
   );
 };

@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { Transaction } from '../types';
 import { triggerHaptic } from '../api';
 import { Icon } from '../components/Icon';
-import { FileDown, Calendar, Filter, ArrowDownRight, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
+import { FileDown, Calendar, Filter, ArrowDownRight, ArrowUpRight, ArrowLeftRight, Edit3 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface ReportsViewProps {
   transactions: Transaction[];
+  onEditTransaction?: (tx: Transaction) => void;
 }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ transactions }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ transactions, onEditTransaction }) => {
   const [periodFilter, setPeriodFilter] = useState<'today' | 'week' | 'month' | 'all'>('month');
   const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
 
@@ -144,11 +145,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ transactions }) => {
             {filtered.map((t) => (
               <div
                 key={t.id}
-                className="p-3 rounded-2xl bg-[#213040] light:bg-white border border-[#354454]/60 flex items-center justify-between"
+                onClick={() => {
+                  triggerHaptic('light');
+                  onEditTransaction?.(t);
+                }}
+                className="p-3 rounded-2xl bg-[#213040] light:bg-white border border-[#354454]/60 hover:border-[#29c184]/50 flex items-center justify-between cursor-pointer transition-all group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0"
+                    className="w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform"
                     style={{
                       backgroundColor:
                         t.type === 'transfer' ? '#1570ef' : t.category_color || '#29c184'
@@ -161,7 +166,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ transactions }) => {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-white light:text-[#1d2939] truncate">
+                    <p className="text-xs font-bold text-white light:text-[#1d2939] truncate group-hover:text-[#29c184] transition-colors">
                       {t.description}
                     </p>
                     <p className="text-[10px] text-[#899098]">
@@ -170,14 +175,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ transactions }) => {
                   </div>
                 </div>
 
-                <span
-                  className={`text-xs font-black shrink-0 ${
-                    t.type === 'expense' ? 'text-[#f0646e]' : t.type === 'transfer' ? 'text-[#1570ef]' : 'text-[#29c184]'
-                  }`}
-                >
-                  {t.type === 'expense' ? '-' : t.type === 'transfer' ? '⇄ ' : '+'}
-                  {t.amount.toLocaleString('uz-UZ')} so'm
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`text-xs font-black font-mono ${
+                      t.type === 'expense' ? 'text-[#f0646e]' : t.type === 'transfer' ? 'text-[#1570ef]' : 'text-[#29c184]'
+                    }`}
+                  >
+                    {t.type === 'expense' ? '-' : t.type === 'transfer' ? '⇄ ' : '+'}
+                    {t.amount.toLocaleString('uz-UZ')} so'm
+                  </span>
+                  <div className="w-6 h-6 rounded-md bg-[#19232e] opacity-0 group-hover:opacity-100 flex items-center justify-center text-[#899098] hover:text-white transition-all">
+                    <Edit3 className="w-3 h-3" />
+                  </div>
+                </div>
               </div>
             ))}
           </div>

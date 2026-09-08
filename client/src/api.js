@@ -140,6 +140,20 @@ export const api = {
         });
         return data.category;
     },
+    async updateCategory(id, updates) {
+        const data = await request(`/categories/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        return data.category;
+    },
+    async deleteCategory(id) {
+        const data = await request(`/categories/${id}`, {
+            method: 'DELETE'
+        });
+        return data.success;
+    },
     // Transactions
     async getTransactions(params) {
         const q = new URLSearchParams();
@@ -167,6 +181,14 @@ export const api = {
         });
         return data.transaction;
     },
+    async updateTransaction(id, updates) {
+        const data = await request(`/transactions/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        return data.transaction;
+    },
     async deleteTransaction(id) {
         return request(`/transactions/${id}`, { method: 'DELETE' });
     },
@@ -185,6 +207,20 @@ export const api = {
             body: JSON.stringify(debt)
         });
         return data.debt;
+    },
+    async updateDebt(id, updates) {
+        const data = await request(`/debts/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        return data.debt;
+    },
+    async deleteDebt(id) {
+        const data = await request(`/debts/${id}`, {
+            method: 'DELETE'
+        });
+        return data.success;
     },
     async payDebt(id, amount) {
         return request(`/debts/${id}/pay`, {

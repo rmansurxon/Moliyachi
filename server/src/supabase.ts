@@ -292,6 +292,81 @@ export async function insertDebtToSupabase(debt: any) {
   }
 }
 
+export async function updateDebtInSupabase(id: string, updates: any) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('debts')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (err: any) {
+    console.error('Supabase updateDebt error:', err.message);
+    return null;
+  }
+}
+
+export async function deleteDebtFromSupabase(id: string) {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from('debts').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err: any) {
+    console.error('Supabase deleteDebt error:', err.message);
+    return false;
+  }
+}
+
+export async function updateCategoryInSupabase(id: string, updates: any) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (err: any) {
+    console.error('Supabase updateCategory error:', err.message);
+    return null;
+  }
+}
+
+export async function deleteCategoryFromSupabase(id: string) {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err: any) {
+    console.error('Supabase deleteCategory error:', err.message);
+    return false;
+  }
+}
+
+export async function updateTransactionInSupabase(id: string, updates: any) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (err: any) {
+    console.error('Supabase updateTransaction error:', err.message);
+    return null;
+  }
+}
+
 // 12. AI Chat Messages History
 export async function getChatMessagesFromSupabase(userId: string) {
   if (!supabase) return [];

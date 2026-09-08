@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Debt } from '../types';
 import { api, triggerHaptic } from '../api';
-import { Plus, Check, Phone, Calendar, ArrowUpRight, ArrowDownRight, Send, CheckCircle2 } from 'lucide-react';
+import { Plus, Check, Phone, Calendar, ArrowUpRight, ArrowDownRight, Send, CheckCircle2, Edit3 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { EditDebtModal } from '../components/EditDebtModal';
 
 interface DebtsViewProps {
   debts: Debt[];
@@ -15,6 +16,7 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ debts, onReload }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [payModalDebt, setPayModalDebt] = useState<Debt | null>(null);
   const [payAmountStr, setPayAmountStr] = useState('');
+  const [selectedDebtForEdit, setSelectedDebtForEdit] = useState<Debt | null>(null);
 
   // Form states for new debt
   const [counterpartyName, setCounterpartyName] = useState('');
@@ -23,6 +25,16 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ debts, onReload }) => {
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleUpdateDebt = async (id: string, updates: Partial<Debt>) => {
+    await api.updateDebt(id, updates);
+    onReload();
+  };
+
+  const handleDeleteDebt = async (id: string) => {
+    await api.deleteDebt(id);
+    onReload();
+  };
 
   const filtered = debts.filter(
     (d) => d.type === tab && d.status === statusFilter
@@ -259,20 +271,34 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ debts, onReload }) => {
                     <span>{d.due_date ? `Muddat: ${d.due_date}` : "Muddatsiz"}</span>
                   </div>
 
-                  {d.status === 'active' && (
-                    <div className="flex items-center gap-2">
-                      {tab === 'lent' && (
-                        <button
-                          onClick={() => handleSendTelegramReminder(d)}
-                          className="px-2.5 py-1.5 rounded-xl bg-[#1570ef]/15 text-[#1570ef] text-xs font-bold flex items-center gap-1 hover:bg-[#1570ef]/25 cursor-pointer"
-                          title="Telegram orqali eslatish"
-                        >
-                          <Send className="w-3 h-3" />
-                          <span>Eslatish</span>
-                        </button>
-                      )}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setSelectedDebtForEdit(d);
+                      }}
+                      className="p-1.5 rounded-xl bg-[#151d27] border border-[#354454] text-[#899098] hover:text-white hover:border-[#29c184] transition-all cursor-pointer"
+                      title="Tahrirlash"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
 
+                    {d.status === 'active' && tab === 'lent' && (
                       <button
+                        type="button"
+                        onClick={() => handleSendTelegramReminder(d)}
+                        className="px-2.5 py-1.5 rounded-xl bg-[#1570ef]/15 text-[#1570ef] text-xs font-bold flex items-center gap-1 hover:bg-[#1570ef]/25 cursor-pointer"
+                        title="Telegram orqali eslatish"
+                      >
+                        <Send className="w-3 h-3" />
+                        <span>Eslatish</span>
+                      </button>
+                    )}
+
+                    {d.status === 'active' && (
+                      <button
+                        type="button"
                         onClick={() => {
                           triggerHaptic('light');
                           setPayModalDebt(d);
@@ -282,8 +308,8 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ debts, onReload }) => {
                       >
                         To'lash
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -403,6 +429,15 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ debts, onReload }) => {
           </div>
         </div>
       )}
+
+      {/* Edit Debt Modal */}
+      <EditDebtModal
+        isOpen={!!selectedDebtForEdit}
+        onClose={() => setSelectedDebtForEdit(null)}
+        debt={selectedDebtForEdit}
+        onUpdate={handleUpdateDebt}
+        onDelete={handleDeleteDebt}
+      />
     </div>
   );
 };

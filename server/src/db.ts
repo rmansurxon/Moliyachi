@@ -338,6 +338,93 @@ export function deleteTransaction(id: string, userId: string): boolean {
   return true;
 }
 
+export function updateTransaction(
+  id: string,
+  userId: string,
+  updates: {
+    amount?: number;
+    description?: string;
+    category_id?: string;
+    balance_id?: string;
+    date?: string;
+    type?: 'expense' | 'income' | 'transfer';
+    to_balance_id?: string;
+  }
+): Transaction | null {
+  const oldTx = getTransactionById(id);
+  if (!oldTx || oldTx.user_id !== userId) return null;
+
+  const newAmount = updates.amount !== undefined ? Number(updates.amount) : oldTx.amount;
+  const newType = updates.type || oldTx.type;
+  const newBalanceId = updates.balance_id || oldTx.balance_id;
+  const newCategoryId = updates.category_id !== undefined ? updates.category_id : oldTx.category_id;
+  const newDescription = updates.description !== undefined ? updates.description : oldTx.description;
+  const newDate = updates.date || oldTx.date;
+  const newToBalanceId = updates.to_balance_id !== undefined ? updates.to_balance_id : oldTx.to_balance_id;
+
+  let catName = 'Toifa';
+  if (newCategoryId) {
+    const cat = db.prepare('SELECT name FROM categories WHERE id = ?').get(newCategoryId) as any;
+    if (cat) catName = cat.name;
+  }
+  let walletName = 'Hamyon';
+  if (newBalanceId) {
+    const wal = db.prepare('SELECT name FROM wallets WHERE id = ?').get(newBalanceId) as any;
+    if (wal) walletName = wal.name;
+  }
+  const newCategoryLabel = `${catName} • ${walletName}`;
+
+  const update = db.transaction(() => {
+    // 1. Revert old transaction wallet balance impact
+    if (oldTx.type === 'expense') {
+      db.prepare('UPDATE wallets SET balance = balance + ? WHERE id = ?').run(oldTx.amount, oldTx.balance_id);
+    } else if (oldTx.type === 'income') {
+      db.prepare('UPDATE wallets SET balance = balance - ? WHERE id = ?').run(oldTx.amount, oldTx.balance_id);
+    } else if (oldTx.type === 'transfer' && oldTx.to_balance_id) {
+      db.prepare('UPDATE wallets SET balance = balance + ? WHERE id = ?').run(oldTx.amount, oldTx.balance_id);
+      db.prepare('UPDATE wallets SET balance = balance - ? WHERE id = ?').run(oldTx.amount, oldTx.to_balance_id);
+    }
+
+    // 2. Apply new transaction wallet balance impact
+    if (newType === 'expense') {
+      db.prepare('UPDATE wallets SET balance = balance - ? WHERE id = ?').run(newAmount, newBalanceId);
+    } else if (newType === 'income') {
+      db.prepare('UPDATE wallets SET balance = balance + ? WHERE id = ?').run(newAmount, newBalanceId);
+    } else if (newType === 'transfer' && newToBalanceId) {
+      db.prepare('UPDATE wallets SET balance = balance - ? WHERE id = ?').run(newAmount, newBalanceId);
+      db.prepare('UPDATE wallets SET balance = balance + ? WHERE id = ?').run(newAmount, newToBalanceId);
+    }
+
+    // 3. Update transaction row
+    db.prepare(`
+      UPDATE transactions
+      SET amount = ?,
+          type = ?,
+          balance_id = ?,
+          category_id = ?,
+          description = ?,
+          category_label = ?,
+          date = ?,
+          to_balance_id = ?
+      WHERE id = ? AND user_id = ?
+    `).run(
+      newAmount,
+      newType,
+      newBalanceId,
+      newCategoryId || null,
+      newDescription,
+      newCategoryLabel,
+      newDate,
+      newToBalanceId || null,
+      id,
+      userId
+    );
+  });
+
+  update();
+  return getTransactionById(id) || null;
+}
+
 export function getTransactionById(id: string): Transaction | undefined {
   return db.prepare(`
     SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
@@ -445,6 +532,43 @@ export function transferBetweenWallets(params: {
 }
 
 
+export function updateCategory(
+  id: string,
+  userId: string,
+  updates: { name?: string; type?: string; icon?: string; color?: string; budget_limit?: number }
+): Category | null {
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(id, userId) as Category | undefined;
+  if (!cat) return null;
+
+  db.prepare(`
+    UPDATE categories
+    SET name = COALESCE(?, name),
+        type = COALESCE(?, type),
+        icon = COALESCE(?, icon),
+        color = COALESCE(?, color),
+        budget_limit = COALESCE(?, budget_limit)
+    WHERE id = ? AND user_id = ?
+  `).run(
+    updates.name ?? null,
+    updates.type ?? null,
+    updates.icon ?? null,
+    updates.color ?? null,
+    updates.budget_limit !== undefined ? updates.budget_limit : null,
+    id,
+    userId
+  );
+
+  return db.prepare('SELECT * FROM categories WHERE id = ?').get(id) as Category;
+}
+
+export function deleteCategory(id: string, userId: string): boolean {
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(id, userId);
+  if (!cat) return false;
+  db.prepare('UPDATE transactions SET category_id = NULL WHERE category_id = ? AND user_id = ?').run(id, userId);
+  db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(id, userId);
+  return true;
+}
+
 export function getCategories(userId: string): Category[] {
   return db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY type ASC, name ASC').all(userId) as Category[];
 }
@@ -461,16 +585,65 @@ export function addDebt(params: {
   type: 'lent' | 'borrowed';
   counterparty_name: string;
   amount: number;
+  phone?: string;
   due_date?: string;
   notes?: string;
 }): Debt {
   const id = uuidv4();
   db.prepare(`
-    INSERT INTO debts (id, user_id, type, counterparty_name, amount, paid_amount, due_date, status, notes)
-    VALUES (?, ?, ?, ?, ?, 0, ?, 'active', ?)
-  `).run(id, params.user_id, params.type, params.counterparty_name, params.amount, params.due_date || null, params.notes || null);
+    INSERT INTO debts (id, user_id, type, counterparty_name, phone, amount, paid_amount, due_date, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?, 'active', ?)
+  `).run(id, params.user_id, params.type, params.counterparty_name, params.phone || null, params.amount, params.due_date || null, params.notes || null);
 
   return db.prepare('SELECT * FROM debts WHERE id = ?').get(id) as Debt;
+}
+
+export function updateDebt(
+  id: string,
+  userId: string,
+  updates: {
+    type?: 'lent' | 'borrowed';
+    counterparty_name?: string;
+    phone?: string;
+    amount?: number;
+    due_date?: string;
+    notes?: string;
+    status?: string;
+  }
+): Debt | null {
+  const debt = db.prepare('SELECT * FROM debts WHERE id = ? AND user_id = ?').get(id, userId) as Debt | undefined;
+  if (!debt) return null;
+
+  db.prepare(`
+    UPDATE debts
+    SET type = COALESCE(?, type),
+        counterparty_name = COALESCE(?, counterparty_name),
+        phone = COALESCE(?, phone),
+        amount = COALESCE(?, amount),
+        due_date = COALESCE(?, due_date),
+        notes = COALESCE(?, notes),
+        status = COALESCE(?, status)
+    WHERE id = ? AND user_id = ?
+  `).run(
+    updates.type ?? null,
+    updates.counterparty_name ?? null,
+    updates.phone ?? null,
+    updates.amount !== undefined ? updates.amount : null,
+    updates.due_date ?? null,
+    updates.notes ?? null,
+    updates.status ?? null,
+    id,
+    userId
+  );
+
+  return db.prepare('SELECT * FROM debts WHERE id = ?').get(id) as Debt;
+}
+
+export function deleteDebt(id: string, userId: string): boolean {
+  const debt = db.prepare('SELECT * FROM debts WHERE id = ? AND user_id = ?').get(id, userId);
+  if (!debt) return false;
+  db.prepare('DELETE FROM debts WHERE id = ? AND user_id = ?').run(id, userId);
+  return true;
 }
 
 export function deleteLastTransaction(userId: string): Transaction | null {

@@ -7,12 +7,17 @@ import {
   getOrCreateDefaultUser,
   getWallets,
   getCategories,
+  updateCategory,
+  deleteCategory,
   getTransactions,
   addTransaction,
+  updateTransaction,
   deleteTransaction,
   deleteLastTransaction,
   getDebts,
   addDebt,
+  updateDebt,
+  deleteDebt,
   getGoals,
   getVouchers,
   getArticles,
@@ -37,8 +42,13 @@ import {
   getWalletsFromSupabase,
   getCategoriesFromSupabase,
   insertTransactionToSupabase,
+  updateTransactionInSupabase,
   deleteTransactionFromSupabase,
   insertDebtToSupabase,
+  updateDebtInSupabase,
+  deleteDebtFromSupabase,
+  updateCategoryInSupabase,
+  deleteCategoryFromSupabase,
   getChatMessagesFromSupabase,
   saveChatMessageToSupabase,
   resetSupabaseBalancesAndTransactions
@@ -252,6 +262,34 @@ app.post('/api/categories', (req, res) => {
   res.json({ success: true, category: created });
 });
 
+app.put('/api/categories/:id', (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { name, type, icon, color, budget_limit } = req.body;
+  const updated = updateCategory(id, user.id, {
+    name,
+    type,
+    icon,
+    color,
+    budget_limit: budget_limit !== undefined ? Number(budget_limit) : undefined
+  });
+  if (!updated) return res.status(404).json({ success: false, message: 'Kategoriya topilmadi' });
+  if (isSupabaseActive()) {
+    updateCategoryInSupabase(id, { name, type, icon, color, budget_limit }).catch(() => {});
+  }
+  res.json({ success: true, category: updated });
+});
+
+app.delete('/api/categories/:id', (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const deleted = deleteCategory(id, user.id);
+  if (deleted && isSupabaseActive()) {
+    deleteCategoryFromSupabase(id).catch(() => {});
+  }
+  res.json({ success: deleted });
+});
+
 // --- TRANSACTIONS ROUTES ---
 app.get('/api/transactions', async (req, res) => {
   const user = (req as any).user;
@@ -295,6 +333,39 @@ app.post('/api/transactions', async (req, res) => {
   res.json({ success: true, transaction: tx });
 });
 
+app.put('/api/transactions/:id', (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { amount, description, category_id, balance_id, date, type, to_balance_id } = req.body;
+
+  const updated = updateTransaction(id, user.id, {
+    amount: amount !== undefined ? Number(amount) : undefined,
+    description,
+    category_id,
+    balance_id,
+    date,
+    type,
+    to_balance_id
+  });
+
+  if (!updated) {
+    return res.status(404).json({ success: false, message: 'Tranzaksiya topilmadi' });
+  }
+
+  if (isSupabaseActive()) {
+    updateTransactionInSupabase(id, {
+      amount: updated.amount,
+      description: updated.description,
+      category_id: updated.category_id,
+      balance_id: updated.balance_id,
+      date: updated.date,
+      type: updated.type,
+      category_label: updated.category_label
+    }).catch(e => console.error('Supabase update tx error:', e));
+  }
+
+  res.json({ success: true, transaction: updated });
+});
 
 app.delete('/api/transactions/last', async (req, res) => {
   const user = (req as any).user;
@@ -338,6 +409,40 @@ app.post('/api/debts', (req, res) => {
 
   const created = db.prepare('SELECT * FROM debts WHERE id = ?').get(id);
   res.json({ success: true, debt: created });
+});
+
+app.put('/api/debts/:id', (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { type, counterparty_name, phone, amount, due_date, notes, status } = req.body;
+
+  const updated = updateDebt(id, user.id, {
+    type,
+    counterparty_name,
+    phone,
+    amount: amount !== undefined ? Number(amount) : undefined,
+    due_date,
+    notes,
+    status
+  });
+
+  if (!updated) return res.status(404).json({ success: false, message: 'Qarz topilmadi' });
+
+  if (isSupabaseActive()) {
+    updateDebtInSupabase(id, updated).catch(() => {});
+  }
+
+  res.json({ success: true, debt: updated });
+});
+
+app.delete('/api/debts/:id', (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const deleted = deleteDebt(id, user.id);
+  if (deleted && isSupabaseActive()) {
+    deleteDebtFromSupabase(id).catch(() => {});
+  }
+  res.json({ success: deleted });
 });
 
 app.post('/api/debts/:id/pay', (req, res) => {

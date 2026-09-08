@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { AddTransactionModal } from './components/AddTransactionModal';
+import { EditTransactionModal } from './components/EditTransactionModal';
 import { LockScreen } from './components/LockScreen';
 
 import { HomeView } from './views/HomeView';
@@ -94,6 +95,7 @@ export const App: React.FC = () => {
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [isLocked, setIsLocked] = useState(false);
 
   // Initialize Telegram WebApp
@@ -188,6 +190,15 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleUpdateTransaction = async (id: string, updates: any) => {
+    try {
+      await api.updateTransaction(id, updates);
+      await loadAllData();
+    } catch (err) {
+      console.error('Update transaction error:', err);
+    }
+  };
+
   const handleDeleteTransaction = async (id: string) => {
     try {
       await api.deleteTransaction(id);
@@ -241,6 +252,7 @@ export const App: React.FC = () => {
               onOpenAddModal={() => setShowAddModal(true)}
               onNavigateTab={(tab) => setCurrentTab(tab)}
               onDeleteTransaction={handleDeleteTransaction}
+              onEditTransaction={(tx) => setSelectedTransactionForEdit(tx)}
               onOpenMonthlyWrap={() => {}}
             />
           )}
@@ -274,7 +286,10 @@ export const App: React.FC = () => {
           )}
 
           {currentTab === 'reports' && (
-            <ReportsView transactions={transactions} />
+            <ReportsView
+              transactions={transactions}
+              onEditTransaction={(tx) => setSelectedTransactionForEdit(tx)}
+            />
           )}
 
           {currentTab === 'settings' && (
@@ -305,6 +320,17 @@ export const App: React.FC = () => {
         wallets={wallets}
         categories={categories}
         onSubmit={handleAddTransaction}
+      />
+
+      {/* Edit / Delete Transaction Modal */}
+      <EditTransactionModal
+        isOpen={!!selectedTransactionForEdit}
+        onClose={() => setSelectedTransactionForEdit(null)}
+        transaction={selectedTransactionForEdit}
+        wallets={wallets}
+        categories={categories}
+        onUpdate={handleUpdateTransaction}
+        onDelete={handleDeleteTransaction}
       />
     </div>
   );

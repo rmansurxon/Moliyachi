@@ -152,6 +152,22 @@ export const api = {
     return data.category;
   },
 
+  async updateCategory(id: string, updates: Partial<Category>): Promise<Category> {
+    const data = await request<{ success: boolean; category: Category }>(`/categories/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    return data.category;
+  },
+
+  async deleteCategory(id: string): Promise<boolean> {
+    const data = await request<{ success: boolean }>(`/categories/${id}`, {
+      method: 'DELETE'
+    });
+    return data.success;
+  },
+
   // Transactions
   async getTransactions(params?: { limit?: number; type?: string; category_id?: string }): Promise<Transaction[]> {
     const q = new URLSearchParams();
@@ -185,6 +201,15 @@ export const api = {
     return data.transaction;
   },
 
+  async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction> {
+    const data = await request<{ success: boolean; transaction: Transaction }>(`/transactions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    return data.transaction;
+  },
+
   async deleteTransaction(id: string) {
     return request(`/transactions/${id}`, { method: 'DELETE' });
   },
@@ -206,6 +231,22 @@ export const api = {
       body: JSON.stringify(debt)
     });
     return data.debt;
+  },
+
+  async updateDebt(id: string, updates: Partial<Debt>): Promise<Debt> {
+    const data = await request<{ success: boolean; debt: Debt }>(`/debts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    return data.debt;
+  },
+
+  async deleteDebt(id: string): Promise<boolean> {
+    const data = await request<{ success: boolean }>(`/debts/${id}`, {
+      method: 'DELETE'
+    });
+    return data.success;
   },
 
   async payDebt(id: string, amount: number) {
