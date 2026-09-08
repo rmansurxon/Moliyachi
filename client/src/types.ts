@@ -120,4 +120,9 @@ export interface FinancialSummary {
   categoryStats: { id: string; name: string; icon: string; color: string; amount: number; count: number }[];
   dailyPoints: { day: string; expense: number; income: number }[];
   period: string;
+  netSavings?: number;
+  savingsRate?: number;
+  categoryBreakdown?: { category_id: string; category_name: string; amount: number; percentage: number; color: string; icon: string }[];
+  recentTransactions?: Transaction[];
+  topExpenseCategory?: { category_name: string; amount: number } | null;
 }

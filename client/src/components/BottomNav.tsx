@@ -1,8 +1,22 @@
 import React from 'react';
 import { triggerHaptic } from '../api';
-import { Home, Sparkles, Plus, BarChart3, HandCoins } from 'lucide-react';
+import { Home, Sparkles, Plus, CreditCard, LayoutGrid } from 'lucide-react';
 
-export type TabType = 'home' | 'chat' | 'stats' | 'debts' | 'goals' | 'balances' | 'categories' | 'reports' | 'settings';
+export type TabType =
+  | 'home'
+  | 'chat'
+  | 'stats'
+  | 'debts'
+  | 'goals'
+  | 'balances'
+  | 'categories'
+  | 'reports'
+  | 'settings'
+  | 'articles'
+  | 'gamification'
+  | 'scan'
+  | 'together'
+  | 'more';
 
 interface BottomNavProps {
   currentTab: TabType;
@@ -15,8 +29,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onChangeTab, o
     { id: 'home', label: 'Asosiy', icon: Home },
     { id: 'chat', label: 'AI Chat', icon: Sparkles, badge: 'AI' },
     { id: 'add', label: "Qo'shish", icon: Plus, isAction: true },
-    { id: 'stats', label: 'Statistika', icon: BarChart3 },
-    { id: 'debts', label: 'Qarzlar', icon: HandCoins }
+    { id: 'balances', label: 'Hamyonlar', icon: CreditCard },
+    { id: 'more', label: "Bo'limlar", icon: LayoutGrid }
   ];
 
   return (
@@ -24,7 +38,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onChangeTab, o
       <div className="max-w-md mx-auto flex items-center justify-around">
         {navItems.map((item) => {
           const IconComp = item.icon;
-          const isActive = currentTab === item.id;
+          const isActive = currentTab === item.id || (item.id === 'more' && ['stats', 'debts', 'goals', 'categories', 'reports', 'articles', 'gamification', 'scan', 'together', 'settings', 'more'].includes(currentTab));
 
           if (item.isAction) {
             return (

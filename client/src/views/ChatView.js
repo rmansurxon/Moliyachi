@@ -141,7 +141,30 @@ export const ChatView = ({ onTransactionCreated }) => {
         setMessages(prev => [...prev, uploadingMsg]);
         try {
             const res = await api.scanReceipt(file);
-            if (res.success && res.transaction) {
+            const receiptData = res.receipt || res.transaction || res.extracted;
+            if (res.success && receiptData) {
+                const merchant = receiptData.merchant || receiptData.description || "Do'kon xaridi";
+                const amount = Number(receiptData.total || receiptData.amount || 0);
+                const category = receiptData.category || receiptData.category_name || "Oziq-ovqat";
+                let createdTx = res.transaction;
+                if (!createdTx && amount > 0) {
+                    try {
+                        const wallets = await api.getWallets();
+                        const targetWallet = wallets.find(w => w.is_default === 1) || wallets[0];
+                        if (targetWallet) {
+                            createdTx = await api.createTransaction({
+                                balance_id: targetWallet.id,
+                                amount,
+                                type: 'expense',
+                                description: merchant,
+                                category_label: category
+                            });
+                        }
+                    }
+                    catch (txErr) {
+                        console.warn('Auto transaction save warning:', txErr);
+                    }
+                }
                 triggerHaptic('success');
                 confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 } });
                 onTransactionCreated?.();
@@ -149,11 +172,11 @@ export const ChatView = ({ onTransactionCreated }) => {
                     id: String(Date.now() + 1),
                     sender: 'ai',
                     text: `🧾 **Chek o'qildi va xarajat qayd etildi!**\n\n` +
-                        `🏪 **Do'kon:** ${res.extracted?.merchant || 'Do\'kon xaridi'}\n` +
-                        `💰 **Summa:** **${res.transaction.amount?.toLocaleString('uz-UZ')} so'm**\n` +
-                        `🏷 **Kategoriya:** ${res.extracted?.category || 'Xarajat'}`,
+                        `🏪 **Do'kon:** ${merchant}\n` +
+                        `💰 **Summa:** **${amount.toLocaleString('uz-UZ')} so'm**\n` +
+                        `🏷 **Kategoriya:** ${category}`,
                     time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
-                    transaction: res.transaction
+                    transaction: createdTx
                 };
                 setMessages(prev => [...prev, replyMsg]);
             }

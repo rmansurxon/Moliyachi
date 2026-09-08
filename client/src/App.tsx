@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Wallet, Category, Transaction, Debt, Goal, FinancialSummary } from './types';
+import { User, Wallet, Category, Transaction, Debt, Goal, Article, FinancialSummary } from './types';
 import { api, tg } from './api';
 
 import { Sidebar } from './components/Sidebar';
@@ -18,6 +18,13 @@ import { GoalsView } from './views/GoalsView';
 import { BalancesView } from './views/BalancesView';
 import { CategoriesView } from './views/CategoriesView';
 import { SettingsView } from './views/SettingsView';
+import { ArticlesView } from './views/ArticlesView';
+import { GamificationView } from './views/GamificationView';
+import { ScanView } from './views/ScanView';
+import { TogetherView } from './views/TogetherView';
+import { MoreSectionsView } from './views/MoreSectionsView';
+import { OyYakuniView } from './views/OyYakuniView';
+import { SubscriptionView } from './views/SubscriptionView';
 
 // Fallback initial data for instant zero-latency render (prevents PWA blank screen)
 const getInitialUser = (): User => {
@@ -48,10 +55,10 @@ const getInitialWallets = (): Wallet[] => {
   } catch {}
 
   return [
-    { id: 'w-invest', user_id: 'default', name: 'Investitsiya', type: 'invest', balance: 0, currency: 'UZS', color: '#7a5af8', is_default: 0 },
-    { id: 'w-card', user_id: 'default', name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', card_number_last4: '8600', is_default: 1 },
-    { id: 'w-cash', user_id: 'default', name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 },
-    { id: 'w-usd', user_id: 'default', name: 'Dollar', type: 'visa', balance: 0, currency: 'USD', color: '#3182ce', card_number_last4: '4100', is_default: 0 }
+    { id: 'w-1', user_id: 'user-mansurxon', name: 'Investitsiya', type: 'invest', balance: 0, currency: 'UZS', color: '#7a5af8', is_default: 0 },
+    { id: 'w-2', user_id: 'user-mansurxon', name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', card_number_last4: '8600', is_default: 1 },
+    { id: 'w-3', user_id: 'user-mansurxon', name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 },
+    { id: 'w-4', user_id: 'user-mansurxon', name: 'Dollar', type: 'visa', balance: 0, currency: 'USD', color: '#3182ce', card_number_last4: '4100', is_default: 0 }
   ];
 };
 
@@ -90,6 +97,7 @@ export const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>(getInitialTransactions);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [articles, setArticles] = useState<Article[]>([]);
   const [summary, setSummary] = useState<FinancialSummary | null>(getInitialSummary);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -97,6 +105,8 @@ export const App: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [showMonthlyWrap, setShowMonthlyWrap] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   // Initialize Telegram WebApp
   useEffect(() => {
@@ -120,7 +130,7 @@ export const App: React.FC = () => {
     }
   }, [theme]);
 
-  // Load all data from backend on mount
+  // Load all data from Supabase on mount
   useEffect(() => {
     loadAllData();
   }, []);
@@ -128,7 +138,7 @@ export const App: React.FC = () => {
   const loadAllData = async () => {
     setIsSyncing(true);
     try {
-      // 1. High-speed single-roundtrip bootstrap (instant 10x speedup)
+      // High-speed direct Supabase bootstrap (single fast call)
       const data = await api.getBootstrapData();
       if (data) {
         if (data.user) {
@@ -142,57 +152,11 @@ export const App: React.FC = () => {
         if (Array.isArray(data.transactions)) setTransactions(data.transactions);
         if (Array.isArray(data.debts)) setDebts(data.debts);
         if (Array.isArray(data.goals)) setGoals(data.goals);
+        if (Array.isArray(data.articles)) setArticles(data.articles);
         if (data.summary) setSummary(data.summary);
-        return;
       }
     } catch (err) {
-      console.warn('Bootstrap sync failed, falling back to individual queries:', err);
-    }
-
-    // Fallback: individual queries if bootstrap is not supported
-    try {
-      const results = await Promise.allSettled([
-        api.getUser(),
-        api.getWallets(),
-        api.getCategories(),
-        api.getTransactions(),
-        api.getDebts(),
-        api.getGoals(),
-        api.getSummary('month')
-      ]);
-
-      if (results[0].status === 'fulfilled' && results[0].value) {
-        setUser(results[0].value);
-        if (results[0].value.pin_code && !isLocked) {
-          setIsLocked(true);
-        }
-      }
-
-      if (results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
-        setWallets(results[1].value);
-      }
-
-      if (results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
-        setCategories(results[2].value);
-      }
-
-      if (results[3].status === 'fulfilled' && Array.isArray(results[3].value)) {
-        setTransactions(results[3].value);
-      }
-
-      if (results[4].status === 'fulfilled' && Array.isArray(results[4].value)) {
-        setDebts(results[4].value);
-      }
-
-      if (results[5].status === 'fulfilled' && Array.isArray(results[5].value)) {
-        setGoals(results[5].value);
-      }
-
-      if (results[6].status === 'fulfilled' && results[6].value) {
-        setSummary(results[6].value);
-      }
-    } catch (err) {
-      console.warn('Background sync warning:', err);
+      console.warn('Sync warning:', err);
     } finally {
       setIsSyncing(false);
     }
@@ -276,7 +240,7 @@ export const App: React.FC = () => {
               onNavigateTab={(tab) => setCurrentTab(tab)}
               onDeleteTransaction={handleDeleteTransaction}
               onEditTransaction={(tx) => setSelectedTransactionForEdit(tx)}
-              onOpenMonthlyWrap={() => {}}
+              onOpenMonthlyWrap={() => setShowMonthlyWrap(true)}
             />
           )}
 
@@ -285,7 +249,7 @@ export const App: React.FC = () => {
           )}
 
           {currentTab === 'stats' && (
-            <StatisticsView onOpenMonthlyWrap={() => {}} />
+            <StatisticsView onOpenMonthlyWrap={() => setShowMonthlyWrap(true)} />
           )}
 
           {currentTab === 'debts' && (
@@ -315,12 +279,43 @@ export const App: React.FC = () => {
             />
           )}
 
+          {currentTab === 'articles' && (
+            <ArticlesView articles={articles} />
+          )}
+
+          {currentTab === 'gamification' && (
+            <GamificationView user={user} vouchers={[]} />
+          )}
+
+          {currentTab === 'scan' && (
+            <ScanView
+              wallets={wallets}
+              categories={categories}
+              onTransactionCreated={loadAllData}
+              onNavigateHome={() => setCurrentTab('home')}
+            />
+          )}
+
+          {currentTab === 'together' && (
+            <TogetherView />
+          )}
+
+          {currentTab === 'more' && (
+            <MoreSectionsView
+              onNavigate={(tab) => {
+                if (tab === 'oy-yakuni') setShowMonthlyWrap(true);
+                else if (tab === 'paywall') setShowPaywall(true);
+                else setCurrentTab(tab as TabType);
+              }}
+            />
+          )}
+
           {currentTab === 'settings' && (
             <SettingsView
               user={user}
               theme={theme}
               onToggleTheme={handleToggleTheme}
-              onOpenPaywall={() => {}}
+              onOpenPaywall={() => setShowPaywall(true)}
               onReloadUser={loadAllData}
             />
           )}
@@ -355,6 +350,16 @@ export const App: React.FC = () => {
         onUpdate={handleUpdateTransaction}
         onDelete={handleDeleteTransaction}
       />
+
+      {/* Monthly Wrap (Stories) Modal */}
+      {showMonthlyWrap && (
+        <OyYakuniView onClose={() => setShowMonthlyWrap(false)} />
+      )}
+
+      {/* Pro Subscription Paywall Modal */}
+      {showPaywall && (
+        <SubscriptionView onClose={() => setShowPaywall(false)} />
+      )}
     </div>
   );
 };

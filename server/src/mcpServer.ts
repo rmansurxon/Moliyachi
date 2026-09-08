@@ -31,6 +31,11 @@ import { User } from './types.js';
 
 import {
   isSupabaseActive,
+  getWalletsFromSupabase,
+  getCategoriesFromSupabase,
+  getTransactionsFromSupabase,
+  getDebtsFromSupabase,
+  getGoalsFromSupabase,
   insertTransactionToSupabase,
   updateTransactionInSupabase,
   deleteTransactionFromSupabase
@@ -170,8 +175,19 @@ export function createHisobchiMcpServer(targetUser?: User): Server {
   // 2. Call Tool Handler
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const wallets = getWallets(user.id);
-    const categories = getCategories(user.id);
+    let wallets = getWallets(user.id);
+    let categories = getCategories(user.id);
+
+    if (isSupabaseActive()) {
+      try {
+        const [sbW, sbC] = await Promise.all([
+          getWalletsFromSupabase(user.id),
+          getCategoriesFromSupabase(user.id)
+        ]);
+        if (Array.isArray(sbW) && sbW.length > 0) wallets = sbW as any;
+        if (Array.isArray(sbC) && sbC.length > 0) categories = sbC as any;
+      } catch {}
+    }
 
     try {
       if (name === 'get_balance') {
@@ -238,7 +254,16 @@ export function createHisobchiMcpServer(targetUser?: User): Server {
       if (name === 'get_transactions') {
         const limit = Number((args as any)?.limit) || 10;
         const type = (args as any)?.type;
-        const txs = getTransactions(user.id, limit, 0, type);
+        let txs = getTransactions(user.id, limit, 0, type);
+
+        if (isSupabaseActive()) {
+          try {
+            const sbTxs = await getTransactionsFromSupabase(user.id, limit);
+            if (Array.isArray(sbTxs) && sbTxs.length > 0) {
+              txs = (type && type !== 'all' ? sbTxs.filter((t: any) => t.type === type) : sbTxs) as any;
+            }
+          } catch {}
+        }
 
         const formatted = txs.map(t => ({
           id: t.id,
@@ -286,7 +311,14 @@ export function createHisobchiMcpServer(targetUser?: User): Server {
 
       if (name === 'get_debts') {
         const status = (args as any)?.status as 'active' | 'closed' | undefined;
-        const debts = getDebts(user.id, status);
+        let debts = getDebts(user.id, status);
+
+        if (isSupabaseActive()) {
+          try {
+            const sbDebts = await getDebtsFromSupabase(user.id, status);
+            if (Array.isArray(sbDebts)) debts = sbDebts as any;
+          } catch {}
+        }
 
         return {
           content: [
@@ -307,7 +339,15 @@ export function createHisobchiMcpServer(targetUser?: User): Server {
       }
 
       if (name === 'get_goals') {
-        const goals = getGoals(user.id);
+        let goals = getGoals(user.id);
+
+        if (isSupabaseActive()) {
+          try {
+            const sbGoals = await getGoalsFromSupabase(user.id);
+            if (Array.isArray(sbGoals)) goals = sbGoals as any;
+          } catch {}
+        }
+
         return {
           content: [
             {

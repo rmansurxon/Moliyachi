@@ -1,17 +1,17 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { triggerHaptic } from '../api';
-import { Home, Sparkles, Plus, BarChart3, HandCoins } from 'lucide-react';
+import { Home, Sparkles, Plus, CreditCard, LayoutGrid } from 'lucide-react';
 export const BottomNav = ({ currentTab, onChangeTab, onOpenAddModal }) => {
     const navItems = [
         { id: 'home', label: 'Asosiy', icon: Home },
         { id: 'chat', label: 'AI Chat', icon: Sparkles, badge: 'AI' },
         { id: 'add', label: "Qo'shish", icon: Plus, isAction: true },
-        { id: 'stats', label: 'Statistika', icon: BarChart3 },
-        { id: 'debts', label: 'Qarzlar', icon: HandCoins }
+        { id: 'balances', label: 'Hamyonlar', icon: CreditCard },
+        { id: 'more', label: "Bo'limlar", icon: LayoutGrid }
     ];
     return (_jsx("nav", { className: "fixed bottom-0 left-0 right-0 z-40 bg-[#19232e]/95 light:bg-white/95 backdrop-blur-xl border-t border-[#354454]/60 light:border-[#eaecf0] px-3 pt-2 pb-5 safe-area-bottom", children: _jsx("div", { className: "max-w-md mx-auto flex items-center justify-around", children: navItems.map((item) => {
                 const IconComp = item.icon;
-                const isActive = currentTab === item.id;
+                const isActive = currentTab === item.id || (item.id === 'more' && ['stats', 'debts', 'goals', 'categories', 'reports', 'articles', 'gamification', 'scan', 'together', 'settings', 'more'].includes(currentTab));
                 if (item.isAction) {
                     return (_jsx("button", { onClick: () => {
                             triggerHaptic('medium');
