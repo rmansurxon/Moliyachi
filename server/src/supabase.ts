@@ -116,7 +116,7 @@ export async function getTransactionsFromSupabase(userId: string, limit = 50) {
       .select(`
         *,
         categories(name, icon, color),
-        wallets(name, type)
+        wallets:balance_id(name, type)
       `)
       .eq('user_id', userId)
       .order('date', { ascending: false })
@@ -174,9 +174,25 @@ export async function getGoalsFromSupabase(userId: string) {
 export async function insertTransactionToSupabase(tx: any) {
   if (!supabase) return null;
   try {
+    const cleanPayload = {
+      id: tx.id,
+      user_id: tx.user_id,
+      balance_id: tx.balance_id,
+      category_id: tx.category_id || null,
+      amount: tx.amount,
+      type: tx.type || 'expense',
+      to_balance_id: tx.to_balance_id || null,
+      description: tx.description,
+      category_label: tx.category_label || null,
+      time_str: tx.time_str || null,
+      date: tx.date || new Date().toISOString(),
+      receipt_image: tx.receipt_image || null,
+      tags: tx.tags || null
+    };
+
     const { data, error } = await supabase
       .from('transactions')
-      .insert([tx])
+      .insert([cleanPayload])
       .select()
       .single();
     if (error) throw error;
@@ -186,3 +202,4 @@ export async function insertTransactionToSupabase(tx: any) {
     return null;
   }
 }
+
