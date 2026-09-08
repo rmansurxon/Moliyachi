@@ -55,6 +55,7 @@ import {
   resetSupabaseBalancesAndTransactions
 } from './supabase.js';
 import { isOpenRouterConfigured, callOpenRouterAI } from './openrouter.js';
+import { setupMcpSseRoutes } from './mcpServer.js';
 
 dotenv.config();
 
@@ -70,6 +71,9 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+// Mount MCP Remote Server-Sent Events (SSE) routes for ChatGPT, Claude, etc.
+setupMcpSseRoutes(app);
 
 // Middleware: extract or identify user
 app.use(async (req, res, next) => {

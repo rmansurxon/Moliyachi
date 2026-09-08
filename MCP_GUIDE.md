@@ -88,3 +88,15 @@ IDE sozlamalaridagi **MCP Servers** bo'limiga:
 - **Name:** `hisobchi-ai`
 - **Command:** `npx tsx /home/mansurxon/Desktop/Hisobchi ai bot/server/src/mcpServer.ts`
 deb qo'shsangiz kifoya!
+
+---
+
+#### 4. ChatGPT ga To'g'ridan-to'g'ri Havola Orqali Ulash (ChatGPT Connectors / SSE):
+Rasmiy ChatGPT (Web yoki ilovada) `Settings -> Connectors -> + (Add Plugin)` oynasiga:
+- **Description:** `Hisobchi AI shaxsiy moliyaviy hisob-kitoblar`
+- **Connection:** `Server URL` (tanlang)
+- **URL (SSE):** `https://moliyachi-31xa.onrender.com/sse` (yoki profilingiz uchun: `https://moliyachi-31xa.onrender.com/sse?tg_id=8724834222`)
+- **Authentication:** `None` (Client ID/Secret kerak emas)
+- **Rozilik:** `I understand and want to continue` katakchasini belgilang va **"Create"** tugmasini bosing!
+
+Endi ChatGPT to'g'ridan-to'g'ri sizning hisoblaringiz, xarajatlaringiz va qarz daftaringizni real vaqtda ko'radi va yangilaydi!
