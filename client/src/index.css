@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --font-primary: "Plus Jakarta Sans", "Rubik", system-ui, -apple-system, sans-serif;
+  --color-help-success: #29c184;
+  --color-help-success-16: #29c18429;
+  --color-help-red: #f0646e;
+  --color-help-red-16: #f0646e29;
+  --color-help-orange: #ff8d28;
+  --color-help-blue: #1570ef;
+  --color-help-blue-violet: #7a5af8;
+  --color-help-violet: #9447d1;
+
+  --color-rank-bronze: #d79a63;
+  --color-rank-silver: #c3ccd8;
+  --color-rank-gold: #f2c14e;
+  --color-rank-diamond: #2fa8cc;
+
+  /* Default Dark Mode */
+  --bg-main: #19232e;
+  --bg-card: #213040;
+  --bg-card-hover: #293a4d;
+  --bg-input: #151d27;
+  --text-primary: #fdfdfd;
+  --text-secondary: #b6bfd0;
+  --border-color: #354454;
+}
+
+html.light {
+  --bg-main: #efefef;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f7f9fa;
+  --bg-input: #e4e7eb;
+  --text-primary: #1d2939;
+  --text-secondary: #899098;
+  --border-color: #eaecf0;
+}
+
+body {
+  font-family: var(--font-primary);
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-help-success);
+}
+
+/* Telegram mini-app safe area insets */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.03); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background: rgba(33, 48, 64, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+html.light .glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}

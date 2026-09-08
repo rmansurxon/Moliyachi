@@ -1,0 +1,29 @@
+{
+  "name": "hisobchi-ai-bot",
+  "version": "1.0.0",
+  "description": "Hisobchi AI - Telegram Bot and Web Dashboard Platform",
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "dev": "npx concurrently -n \"SERVER,CLIENT\" -c \"cyan,green\" \"npm run dev:server\" \"npm run dev:client\"",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "build": "npm run build:server && npm run build:client",
+    "start": "cd server && npm start",
+    "mcp": "cd server && npm run mcp"
+  },
+
+  "keywords": [
+    "hisobchi",
+    "ai",
+    "telegram-bot",
+    "accounting",
+    "finance",
+    "react"
+  ],
+  "author": "Mansurxon",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  }
+}
