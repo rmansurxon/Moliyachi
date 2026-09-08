@@ -38,6 +38,7 @@ import {
   isSupabaseActive,
   getArticlesFromSupabase,
   getAppTextsFromSupabase,
+  getUserByTelegramIdFromSupabase,
   getTransactionsFromSupabase,
   getWalletsFromSupabase,
   getCategoriesFromSupabase,
@@ -71,13 +72,13 @@ app.use(cors({
 app.use(express.json());
 
 // Middleware: extract or identify user
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   const authHeader = req.headers['x-user-id'] as string;
-  const tgIdHeader = req.headers['x-telegram-id'] as string;
+  const tgIdHeader = (req.headers['x-telegram-id'] || req.query.tg_id) as string;
   const tgUserHeader = req.headers['x-telegram-user'] as string;
   let user;
 
-  // 1. If Telegram WebApp header present, find or create exact Telegram user
+  // 1. If Telegram ID header or query param present, find or create exact Telegram user
   if (tgIdHeader) {
     let tgUserObj: any = { id: tgIdHeader };
     if (tgUserHeader) {
@@ -88,11 +89,28 @@ app.use((req, res, next) => {
         tgUserObj = JSON.parse(rawJson);
       } catch {}
     }
+
     user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(String(tgIdHeader));
+    if (!user && isSupabaseActive()) {
+      try {
+        const sbUser = await getUserByTelegramIdFromSupabase(tgIdHeader);
+        if (sbUser) {
+          db.prepare(`
+            INSERT INTO users (id, telegram_id, first_name, username, currency, theme, language, xp, streak, rank, diamonds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET telegram_id = excluded.telegram_id
+          `).run(sbUser.id, String(tgIdHeader), sbUser.first_name, sbUser.username, sbUser.currency, sbUser.theme, sbUser.language, sbUser.xp, sbUser.streak, sbUser.rank, sbUser.diamonds);
+          user = db.prepare('SELECT * FROM users WHERE id = ?').get(sbUser.id);
+        }
+      } catch (e: any) {
+        console.warn('Supabase user lookup warning:', e.message);
+      }
+    }
+
     if (!user) {
       user = getOrCreateDefaultUser({
         id: tgUserObj.id || tgIdHeader,
-        first_name: tgUserObj.first_name || 'Foydalanuvchi',
+        first_name: tgUserObj.first_name || 'Mansurxon',
         username: tgUserObj.username || ''
       });
     }

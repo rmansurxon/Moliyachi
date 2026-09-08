@@ -42,14 +42,22 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
     console.error(`⚠️ Telegram bot update xatosi:`, err?.message || err);
   });
 
-  // Reply Keyboard layout
-  const mainReplyKeyboard = Markup.keyboard([
-    [Markup.button.webApp('🚀 Hisobchi AI Ilovasi', targetWebAppUrl)],
-    ['➕ Xarajat', '➕ Daromad'],
-    ['💳 Balans', '📊 Statistika'],
-    ['🤝 Qarzlar', '↩️ Bekor qilish'],
-    ['💡 Yordam']
-  ]).resize();
+  const getWebAppUrlForUser = (userId?: string | number) => {
+    if (!userId) return targetWebAppUrl;
+    const sep = targetWebAppUrl.includes('?') ? '&' : '?';
+    return `${targetWebAppUrl}${sep}tg_id=${userId}`;
+  };
+
+  // Reply Keyboard layout helper
+  const getMainKeyboard = (userId?: string | number) => {
+    return Markup.keyboard([
+      [Markup.button.webApp('🚀 Hisobchi AI Ilovasi', getWebAppUrlForUser(userId))],
+      ['➕ Xarajat', '➕ Daromad'],
+      ['💳 Balans', '📊 Statistika'],
+      ['🤝 Qarzlar', '↩️ Bekor qilish'],
+      ['💡 Yordam']
+    ]).resize();
+  };
 
   // 1. /start Handler
   const handleStart = async (ctx: any) => {
@@ -73,7 +81,7 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
 
     await ctx.reply(welcomeText, {
       parse_mode: 'Markdown',
-      ...mainReplyKeyboard
+      ...getMainKeyboard(from.id)
     });
   };
 
@@ -591,7 +599,7 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
 
     await ctx.reply(replyText, {
       parse_mode: 'Markdown',
-      ...mainReplyKeyboard
+      ...getMainKeyboard(ctx.from?.id)
     });
   });
 

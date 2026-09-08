@@ -19,15 +19,33 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | '
 
 const API_BASE = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api');
 
+// Auto-detect and persist ?tg_id=... from URL (when opened from Telegram Desktop into external browser)
+try {
+  if (typeof window !== 'undefined' && window.location?.search) {
+    const params = new URLSearchParams(window.location.search);
+    const qTgId = params.get('tg_id');
+    if (qTgId) {
+      localStorage.setItem('hisobchi_telegram_id', qTgId);
+    }
+  }
+} catch {}
+
 // Centralized request helper with Telegram Auto-Auth & persistence
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   try {
     const tgUser = tg?.initDataUnsafe?.user;
-    if (tgUser && tgUser.id) {
-      headers['x-telegram-id'] = String(tgUser.id);
+    let tgId = tgUser?.id ? String(tgUser.id) : null;
+    if (tgId) {
+      localStorage.setItem('hisobchi_telegram_id', tgId);
+      headers['x-telegram-id'] = tgId;
       // Encode as ASCII/URI component to prevent ByteString/non-ASCII Header crash on mobile Telegram WebApp
       headers['x-telegram-user'] = encodeURIComponent(JSON.stringify(tgUser));
+    } else {
+      const cachedTgId = localStorage.getItem('hisobchi_telegram_id');
+      if (cachedTgId) {
+        headers['x-telegram-id'] = cachedTgId;
+      }
     }
   } catch {}
 

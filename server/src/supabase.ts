@@ -73,6 +73,22 @@ export async function getUserFromSupabase(userId: string) {
   }
 }
 
+export async function getUserByTelegramIdFromSupabase(tgId: string | number) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', String(tgId))
+      .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  } catch (err: any) {
+    console.error('Supabase getUserByTelegramId error:', err.message);
+    return null;
+  }
+}
+
 // 4. Hamyonlar (Wallets)
 export async function getWalletsFromSupabase(userId: string) {
   if (!supabase) return null;
