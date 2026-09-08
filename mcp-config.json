@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "hisobchi-ai": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/home/mansurxon/Desktop/Hisobchi ai bot/server/src/mcpServer.ts"
+      ],
+      "env": {
+        "PORT": "5000"
+      }
+    }
+  }
+}

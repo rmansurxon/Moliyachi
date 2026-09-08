@@ -24,7 +24,8 @@ export function getAuthHeaders() {
         const tgUser = tg?.initDataUnsafe?.user;
         if (tgUser && tgUser.id) {
             headers['x-telegram-id'] = String(tgUser.id);
-            headers['x-telegram-user'] = JSON.stringify(tgUser);
+            // Encode as ASCII/URI component to prevent ByteString/non-ASCII Header crash on mobile Telegram WebApp
+            headers['x-telegram-user'] = encodeURIComponent(JSON.stringify(tgUser));
         }
     }
     catch { }
@@ -44,15 +45,24 @@ async function request(endpoint, options = {}) {
         ...(options.headers || {})
     };
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
-    const res = await fetch(url, {
-        ...options,
-        headers: mergedHeaders
-    });
-    if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}: ${errText || res.statusText}`);
+    // 15-second timeout controller so requests never hang indefinitely on mobile networks
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+        const res = await fetch(url, {
+            ...options,
+            headers: mergedHeaders,
+            signal: options.signal || controller.signal
+        });
+        if (!res.ok) {
+            const errText = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status}: ${errText || res.statusText}`);
+        }
+        return await res.json();
     }
-    return res.json();
+    finally {
+        clearTimeout(timeoutId);
+    }
 }
 export const api = {
     // Auth & Profile

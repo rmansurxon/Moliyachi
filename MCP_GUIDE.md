@@ -38,12 +38,14 @@ deb yozsangiz, AI avtomatik tarzda sizning MCP serveringiz orqali real hisoblari
 
 ---
 
-### 🛠️ MCP Serverimiz taqdim etadigan Tool (Asbob)lar:
+### 🛠️ MCP Serverimiz taqdim etadigan Tool (Asbob)lar (9 ta):
 
 | Tool Nomi | Vazifasi |
 | :--- | :--- |
 | `get_balance` | Barcha hamyonlar (Uzcard, Humo, Naqd, Dollar) va umumiy balansni olish |
-| `add_transaction` | Yangi xarajat yoki daromadni AI orqali kiritish |
+| `add_transaction` | Yangi xarajat yoki daromadni AI orqali kiritish (balansni yangilash bilan) |
+| `update_transaction` | Mavjud amaliyotni tahrirlash va hamyon balansini to'g'ri qayta hisoblash |
+| `delete_transaction` | Amaliyotni o'chirish va hamyon balansini dastlabki holatiga qaytarish (revert) |
 | `get_transactions` | Oxirgi tranzaksiyalar ro'yxati va filtrlash |
 | `get_financial_summary` | Oylik tahlil, xarajatlar nisbati va eng ko'p pul ketgan toifalar |
 | `get_debts` | Faol qarzlar daftari (kimdan qancha olish yoki berish kerak) |
@@ -52,7 +54,15 @@ deb yozsangiz, AI avtomatik tarzda sizning MCP serveringiz orqali real hisoblari
 
 ---
 
+### ☁️ Supabase bilan Avtomatik Sinxronizatsiya
+
+Agar loyihangizda Supabase sozlangan bo'lsa (`SUPABASE_URL` va `SUPABASE_KEY`), MCP server orqali kiritilgan, o'zgartirilgan yoki o'chirilgan har qanday operatsiya **avtomatik tarzda Supabase bulut bazasi bilan ham parallel sinxronlashtiriladi**.
+
+---
+
 ### 🚀 MCP Serverni Ishga Tushirish va Ulanish
+
+Loyiha ildizida tayyor [`mcp-config.json`](file:///home/mansurxon/Desktop/Hisobchi%20ai%20bot/mcp-config.json) fayli mavjud.
 
 #### 1. Sinov uchun ishga tushirish:
 Terminalda:
@@ -61,7 +71,7 @@ npm run mcp
 ```
 
 #### 2. Claude Desktop ilovasiga ulash:
-`claude_desktop_config.json` faylingizga quyidagicha qo'shasiz:
+`claude_desktop_config.json` faylingizga quyidagicha qo'shasiz (yoki `mcp-config.json` dan ko'chirib olasiz):
 ```json
 {
   "mcpServers": {

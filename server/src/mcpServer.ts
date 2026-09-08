@@ -16,12 +16,21 @@ import {
   getCategories,
   getTransactions,
   addTransaction,
+  updateTransaction,
+  deleteTransaction,
   getFinancialSummary,
   getDebts,
   getGoals,
   transferBetweenWallets,
   getArticles
 } from './db.js';
+
+import {
+  isSupabaseActive,
+  insertTransactionToSupabase,
+  updateTransactionInSupabase,
+  deleteTransactionFromSupabase
+} from './supabase.js';
 
 // Initialize local DB
 initDB();
@@ -119,6 +128,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['from_wallet', 'to_wallet', 'amount']
         }
+      },
+      {
+        name: 'update_transaction',
+        description: "Mavjud operatsiyani tahrirlash (summa, toifa, tavsif, hamyon) va hamyon balansini to'g'ri qayta hisoblash.",
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: "Tahrirlanadigan operatsiyaning ID raqami" },
+            amount: { type: 'number', description: "Yangi summa (so'mda)" },
+            type: { type: 'string', enum: ['expense', 'income'], description: "Yangi amaliyot turi" },
+            description: { type: 'string', description: "Yangi amaliyot tavsifi" },
+            category_name: { type: 'string', description: "Yangi toifa nomi" },
+            wallet_name: { type: 'string', description: "Yangi hamyon/karta nomi" }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'delete_transaction',
+        description: "Tranzaksiyani o'chirish va tegishli hamyon balansini dastlabki holatiga qaytarish (revert).",
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: "O'chirilishi kerak bo'lgan tranzaksiya ID si" }
+          },
+          required: ['id']
+        }
       }
     ]
   };
@@ -179,11 +215,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         category_label: `${targetCategory?.name || 'Toifa'} • ${targetWallet.name}`
       });
 
+      if (isSupabaseActive()) {
+        insertTransactionToSupabase(tx).catch(e => console.warn('MCP Supabase sync warning:', e.message));
+      }
+
       return {
         content: [
           {
             type: 'text',
-            text: `✅ ${type === 'expense' ? 'Xarajat' : 'Daromad'} muvaffaqiyatli saqlandi:\n- Summa: ${Number(amount).toLocaleString('uz-UZ')} UZS\n- Toifa: ${targetCategory?.name}\n- Hamyon: ${targetWallet.name}\n- Yangi qoldiq: ${targetWallet.balance.toLocaleString('uz-UZ')} UZS`
+            text: `✅ ${type === 'expense' ? 'Xarajat' : 'Daromad'} muvaffaqiyatli saqlandi:\n- ID: ${tx.id}\n- Summa: ${Number(amount).toLocaleString('uz-UZ')} UZS\n- Toifa: ${targetCategory?.name}\n- Hamyon: ${targetWallet.name}\n- Yangi qoldiq: ${targetWallet.balance.toLocaleString('uz-UZ')} UZS`
           }
         ]
       };
@@ -297,6 +337,77 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           {
             type: 'text',
             text: `✅ ${Number(amount).toLocaleString('uz-UZ')} UZS muvaffaqiyatli ${fromW.name} dan ${toW.name} ga o'tkazildi!`
+          }
+        ]
+      };
+    }
+
+    if (name === 'update_transaction') {
+      const { id, amount, type, description, category_name, wallet_name } = (args || {}) as any;
+      if (!id) throw new Error("Operatsiya 'id' si kiritilishi shart!");
+
+      let targetWalletId: string | undefined;
+      if (wallet_name) {
+        const found = wallets.find(w => w.name.toLowerCase().includes(wallet_name.toLowerCase()));
+        if (found) targetWalletId = found.id;
+      }
+
+      let targetCategoryId: string | undefined;
+      if (category_name) {
+        const found = categories.find(c => c.name.toLowerCase().includes(category_name.toLowerCase()));
+        if (found) targetCategoryId = found.id;
+      }
+
+      const updated = updateTransaction(id, user.id, {
+        ...(amount !== undefined ? { amount: Number(amount) } : {}),
+        ...(type ? { type } : {}),
+        ...(description ? { description } : {}),
+        ...(targetCategoryId ? { category_id: targetCategoryId } : {}),
+        ...(targetWalletId ? { balance_id: targetWalletId } : {})
+      });
+
+      if (!updated) {
+        throw new Error(`ID: ${id} bo'lgan tranzaksiya topilmadi yoki o'zgartirish muvaffaqiyatsiz tugadi.`);
+      }
+
+      if (isSupabaseActive()) {
+        updateTransactionInSupabase(id, {
+          ...(amount !== undefined ? { amount: Number(amount) } : {}),
+          ...(type ? { type } : {}),
+          ...(description ? { description } : {}),
+          ...(targetCategoryId ? { category_id: targetCategoryId } : {}),
+          ...(targetWalletId ? { balance_id: targetWalletId } : {})
+        }).catch(e => console.warn('MCP Supabase update warning:', e.message));
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ Tranzaksiya muvaffaqiyatli tahrirlandi:\n- ID: ${updated.id}\n- Summa: ${updated.amount.toLocaleString('uz-UZ')} UZS\n- Tavsif: ${updated.description}\n- Turi: ${updated.type}`
+          }
+        ]
+      };
+    }
+
+    if (name === 'delete_transaction') {
+      const { id } = (args || {}) as any;
+      if (!id) throw new Error("O'chirilishi kerak bo'lgan operatsiya 'id' si kiritilishi shart!");
+
+      const ok = deleteTransaction(id, user.id);
+      if (!ok) {
+        throw new Error(`ID: ${id} bo'lgan operatsiya topilmadi.`);
+      }
+
+      if (isSupabaseActive()) {
+        deleteTransactionFromSupabase(id).catch(e => console.warn('MCP Supabase delete warning:', e.message));
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `🗑️ ID: ${id} bo'lgan operatsiya muvaffaqiyatli o'chirildi va hamyon balansi qaytarildi.`
           }
         ]
       };

@@ -82,7 +82,10 @@ app.use((req, res, next) => {
     let tgUserObj: any = { id: tgIdHeader };
     if (tgUserHeader) {
       try {
-        tgUserObj = JSON.parse(tgUserHeader);
+        const rawJson = (tgUserHeader.startsWith('%') || tgUserHeader.includes('%'))
+          ? decodeURIComponent(tgUserHeader)
+          : tgUserHeader;
+        tgUserObj = JSON.parse(rawJson);
       } catch {}
     }
     user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(String(tgIdHeader));
