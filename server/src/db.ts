@@ -22,6 +22,7 @@ export function initDB() {
       telegram_id TEXT UNIQUE,
       first_name TEXT NOT NULL,
       username TEXT,
+      phone TEXT,
       currency TEXT DEFAULT 'UZS',
       theme TEXT DEFAULT 'dark',
       language TEXT DEFAULT 'uz',
@@ -140,6 +141,11 @@ export function initDB() {
     );
   `);
 
+  // Safe migration for phone column if table already existed
+  try {
+    db.prepare('ALTER TABLE users ADD COLUMN phone TEXT').run();
+  } catch {}
+
   // Seed default articles
   const articlesCount = (db.prepare('SELECT COUNT(*) as count FROM articles').get() as { count: number }).count;
   if (articlesCount === 0) {
@@ -180,7 +186,7 @@ function seedArticles() {
   }
 }
 
-export function getOrCreateDefaultUser(telegramUser?: { id: string | number; first_name?: string; username?: string }): User {
+export function getOrCreateDefaultUser(telegramUser?: { id: string | number; first_name?: string; username?: string; phone?: string }): User {
   let user: User | undefined;
 
   if (telegramUser?.id) {
@@ -191,7 +197,7 @@ export function getOrCreateDefaultUser(telegramUser?: { id: string | number; fir
       if (tgIdStr === '8724834222') {
         const primary = db.prepare("SELECT * FROM users WHERE id = 'user-mansurxon'").get() as User | undefined;
         if (primary) {
-          db.prepare('UPDATE users SET telegram_id = ? WHERE id = ?').run(tgIdStr, 'user-mansurxon');
+          db.prepare('UPDATE users SET telegram_id = ?, phone = COALESCE(phone, ?) WHERE id = ?').run(tgIdStr, telegramUser.phone || null, 'user-mansurxon');
           return db.prepare("SELECT * FROM users WHERE id = 'user-mansurxon'").get() as User;
         }
       }
@@ -199,11 +205,14 @@ export function getOrCreateDefaultUser(telegramUser?: { id: string | number; fir
       // Every other Telegram user gets their own brand new isolated user in SQLite
       const newId = uuidv4();
       db.prepare(`
-        INSERT INTO users (id, telegram_id, first_name, username, currency, theme, language, xp, streak, rank, diamonds)
-        VALUES (?, ?, ?, ?, 'UZS', 'dark', 'uz', 100, 1, 'bronze', 0)
-      `).run(newId, tgIdStr, telegramUser.first_name || 'Foydalanuvchi', telegramUser.username || '');
+        INSERT INTO users (id, telegram_id, first_name, username, phone, currency, theme, language, xp, streak, rank, diamonds)
+        VALUES (?, ?, ?, ?, ?, 'UZS', 'dark', 'uz', 100, 1, 'bronze', 0)
+      `).run(newId, tgIdStr, telegramUser.first_name || 'Foydalanuvchi', telegramUser.username || '', telegramUser.phone || null);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(newId) as User;
       createDefaultDataForUser(newId);
+    } else if (telegramUser.phone && !user.phone) {
+      db.prepare('UPDATE users SET phone = ? WHERE id = ?').run(telegramUser.phone, user.id);
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as User;
     }
   } else {
     user = db.prepare("SELECT * FROM users WHERE id = 'user-mansurxon'").get() as User | undefined;
@@ -222,6 +231,27 @@ export function getOrCreateDefaultUser(telegramUser?: { id: string | number; fir
   }
 
   return user;
+}
+
+export function updateUserPhone(telegramIdOrUserId: string | number, phone: string, pinCode: string = '0000'): User | null {
+  const target = String(telegramIdOrUserId);
+  db.prepare(`
+    UPDATE users 
+    SET phone = ?, pin_code = COALESCE(pin_code, ?)
+    WHERE telegram_id = ? OR id = ?
+  `).run(phone, pinCode, target, target);
+
+  return (db.prepare('SELECT * FROM users WHERE telegram_id = ? OR id = ?').get(target, target) as User) || null;
+}
+
+export function getUserByPhone(phone: string): User | null {
+  const cleanPhone = phone.replace(/[^\d+]/g, '');
+  const digitsOnly = cleanPhone.replace(/^\+/, '');
+  return (db.prepare(`
+    SELECT * FROM users 
+    WHERE phone = ? OR phone = ? OR phone = ?
+    LIMIT 1
+  `).get(phone, cleanPhone, '+' + digitsOnly) as User) || null;
 }
 
 export function createDefaultDataForUser(userId: string) {

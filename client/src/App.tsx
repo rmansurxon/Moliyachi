@@ -8,6 +8,7 @@ import { BottomNav, TabType } from './components/BottomNav';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { LockScreen } from './components/LockScreen';
+import { LoginModal } from './components/LoginModal';
 
 import { HomeView } from './views/HomeView';
 import { ChatView } from './views/ChatView';
@@ -108,6 +109,14 @@ export const App: React.FC = () => {
   const [summary, setSummary] = useState<FinancialSummary | null>(getInitialSummary);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    // Inside Telegram WebApp, auto-authenticated
+    if (api.isTelegramEnv()) return true;
+    // In external browser, check if active session exists
+    return Boolean(localStorage.getItem('hisobchi_user_id'));
+  });
+
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
@@ -150,9 +159,6 @@ export const App: React.FC = () => {
       if (data) {
         if (data.user) {
           setUser(data.user);
-          if (data.user.pin_code && !isLocked) {
-            setIsLocked(true);
-          }
         }
         if (Array.isArray(data.wallets)) setWallets(data.wallets);
         if (Array.isArray(data.categories)) setCategories(data.categories);
@@ -201,6 +207,19 @@ export const App: React.FC = () => {
       console.error(err);
     }
   };
+
+  // If in external browser and not authenticated, require Phone + PIN Login
+  if (!isAuthenticated) {
+    return (
+      <LoginModal
+        onSuccess={(loggedInUser) => {
+          setUser(loggedInUser);
+          setIsAuthenticated(true);
+          loadAllData();
+        }}
+      />
+    );
+  }
 
   if (isLocked && user?.pin_code) {
     return (

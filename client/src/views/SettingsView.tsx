@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { api, triggerHaptic } from '../api';
-import { Settings, Globe, DollarSign, Lock, Moon, Sun, Crown, Shield, Smartphone, Check } from 'lucide-react';
+import { Settings, Globe, DollarSign, Lock, Moon, Sun, Crown, Shield, Smartphone, Check, Phone, LogOut } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface SettingsViewProps {
@@ -172,14 +172,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </button>
       </div>
 
+      {/* Bog'langan telefon raqam */}
+      <div className="p-4 rounded-3xl bg-[#213040] light:bg-white border border-[#354454] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-[#29c184]/15 flex items-center justify-center text-[#29c184]">
+            <Phone className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-white light:text-[#1d2939]">Bog'langan telefon raqam</h4>
+            <p className="text-xs font-mono font-bold text-[#29c184]">
+              {user.phone || "Telegram orqali tasdiqlanmagan"}
+            </p>
+          </div>
+        </div>
+        {user.phone ? (
+          <span className="px-2.5 py-1 text-[10px] font-bold rounded-full bg-[#29c184]/20 text-[#29c184] border border-[#29c184]/30 flex items-center gap-1">
+            <Check className="w-3 h-3" />
+            <span>Faol</span>
+          </span>
+        ) : (
+          <span className="px-2.5 py-1 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            Botda /start
+          </span>
+        )}
+      </div>
+
       {/* Security PIN Code Lock */}
       <div className="p-4 rounded-3xl bg-[#213040] light:bg-white border border-[#354454] space-y-2">
         <label className="text-xs font-bold text-white light:text-[#1d2939] flex items-center gap-1.5">
           <Shield className="w-4 h-4 text-[#f0646e]" />
-          <span>4 xonali PIN Kod Xavfsizligi</span>
+          <span>4 xonali PIN Kod (Veb-kirish)</span>
         </label>
         <p className="text-[11px] text-[#899098]">
-          Ilovaga kirishda maxsus kod so'ralishi uchun 4 xonali PIN kiriting.
+          Brauzerdan (Chrome) kirish uchun 4 xonali PIN-kod (Boshlang'ich: 0000).
         </p>
         <div className="flex gap-2">
           <input
@@ -203,12 +228,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <div className="p-4 rounded-3xl bg-[#151d27] border border-[#354454]/60 space-y-2 text-xs text-[#899098]">
         <div className="flex items-center gap-2 text-white font-bold">
           <Smartphone className="w-4 h-4 text-[#29c184]" />
-          <span>Telegram Bot Integratsiyasi Faol</span>
+          <span>Telegram Mini App Integratsiyasi</span>
         </div>
         <p className="text-[11px]">
-          Ushbu WebApp Telegram boti bilan 100% integratsiyalashgan. Botga yuborilgan ovozli, matnli va chek xabarlari bir zumda ushbu ilovaga tushadi.
+          Telegram ichida Mini App ochilganda hech qanday parol kiritish shart emas. Har bir Telegram hisob faqat o'ziga tegishli ma'lumotlarni ko'radi.
         </p>
       </div>
+
+      {/* Logout button */}
+      <button
+        onClick={() => {
+          if (window.confirm("Haqiqatan ham ushbu qurilmadan chiqmoqchimisiz?")) {
+            api.logoutUser();
+            window.location.reload();
+          }
+        }}
+        className="w-full py-3.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/25 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
+      >
+        <LogOut className="w-4 h-4" />
+        <span>Hisobdan chiqish (Logout)</span>
+      </button>
     </div>
   );
 };

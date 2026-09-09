@@ -89,6 +89,55 @@ export async function getUserByTelegramIdFromSupabase(tgId: string | number) {
   }
 }
 
+export async function updateUserPhoneInSupabase(tgIdOrUserId: string | number, phone: string, pinCode: string = '0000') {
+  if (!supabase) return null;
+  const target = String(tgIdOrUserId);
+  try {
+    // First try by telegram_id
+    const { data: byTg } = await supabase
+      .from('users')
+      .update({ phone, pin_code: pinCode })
+      .eq('telegram_id', target)
+      .select()
+      .maybeSingle();
+
+    if (byTg) return byTg;
+
+    // Next try by id
+    const { data: byId } = await supabase
+      .from('users')
+      .update({ phone, pin_code: pinCode })
+      .eq('id', target)
+      .select()
+      .maybeSingle();
+
+    return byId || null;
+  } catch (err: any) {
+    console.error('Supabase updateUserPhone error:', err.message);
+    return null;
+  }
+}
+
+export async function getUserByPhoneFromSupabase(phone: string) {
+  if (!supabase) return null;
+  const clean = phone.replace(/[^\d+]/g, '');
+  const digits = clean.replace(/^\+/, '');
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`phone.eq.${phone},phone.eq.${clean},phone.eq.+${digits}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  } catch (err: any) {
+    console.error('Supabase getUserByPhone error:', err.message);
+    return null;
+  }
+}
+
 // 4. Hamyonlar (Wallets)
 export async function getWalletsFromSupabase(userId: string) {
   if (!supabase) return null;

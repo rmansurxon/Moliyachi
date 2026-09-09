@@ -4,6 +4,17 @@ import { supabase } from './supabase';
 // Telegram WebApp helper
 export const tg = (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) || null;
 
+export function isTelegramEnv(): boolean {
+  try {
+    if (tg && (tg.initDataUnsafe?.user?.id || (tg.initData && tg.initData.length > 0))) return true;
+    if (typeof window !== 'undefined' && window.location?.search) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tg_id')) return true;
+    }
+  } catch {}
+  return false;
+}
+
 export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | 'error' | 'warning' = 'light') {
   try {
     if (tg?.HapticFeedback) {
@@ -69,7 +80,7 @@ export async function getEffectiveUserId(): Promise<string> {
     if (qTgId) currentTgId = qTgId;
   }
 
-  // 1. If opened inside Telegram or with a specific tg_id
+  // 1. If opened inside Telegram or with a specific tg_id -> Instant Seamless Auto-Login
   if (currentTgId) {
     const prevTgId = localStorage.getItem('hisobchi_current_tg_id');
     if (prevTgId && prevTgId !== currentTgId) {
@@ -114,6 +125,7 @@ export async function getEffectiveUserId(): Promise<string> {
         currency: 'UZS',
         theme: 'dark',
         language: 'uz',
+        pin_code: '0000',
         xp: 100,
         diamonds: 0,
         streak: 1,
@@ -150,37 +162,108 @@ export async function getEffectiveUserId(): Promise<string> {
     }
   }
 
-  // 2. Not in Telegram and no tg_id provided: Device-isolated Guest Session
-  let deviceAnonId = localStorage.getItem('hisobchi_device_anon_id');
-  if (!deviceAnonId) {
-    deviceAnonId = `anon-${Math.random().toString(36).substring(2, 10)}`;
-    localStorage.setItem('hisobchi_device_anon_id', deviceAnonId);
+  // 2. Standalone Web Browser (Chrome/Safari): check stored authenticated session
+  const savedUserId = localStorage.getItem('hisobchi_user_id');
+  if (savedUserId) {
+    return savedUserId;
   }
 
+  return '';
+}
+
+// Phone Number + PIN-code Authentication for External Browsers (Chrome / Safari / PC)
+export async function loginWithPhoneAndPin(
+  phoneInput: string,
+  pinInput: string
+): Promise<{ success: boolean; user?: User; error?: string }> {
   try {
-    const { data: anonUser } = await supabase.from('users').select('id').eq('id', deviceAnonId).maybeSingle();
-    if (!anonUser) {
-      await supabase.from('users').insert([{
-        id: deviceAnonId,
-        first_name: 'Mehmon',
-        currency: 'UZS',
-        theme: 'dark',
-        language: 'uz',
-        xp: 0,
-        diamonds: 0,
-        streak: 1,
-        rank: 'bronze'
-      }]);
-      await supabase.from('wallets').insert([
-        { id: `w-${deviceAnonId}-1`, user_id: deviceAnonId, name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', is_default: 1 },
-        { id: `w-${deviceAnonId}-2`, user_id: deviceAnonId, name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 }
-      ]);
+    const rawDigits = phoneInput.replace(/\D/g, '');
+    if (rawDigits.length < 9) {
+      return {
+        success: false,
+        error: "Telefon raqamini to'liq kiriting (masalan: +998 90 123 45 67)"
+      };
     }
-    localStorage.setItem('hisobchi_user_id', deviceAnonId);
-    return deviceAnonId;
-  } catch {
-    return deviceAnonId;
+
+    let normalized = rawDigits;
+    if (rawDigits.length === 9) {
+      normalized = '998' + rawDigits;
+    }
+
+    const candidateList = [
+      '+' + normalized,
+      normalized,
+      '+' + rawDigits,
+      rawDigits,
+      phoneInput.trim()
+    ];
+
+    const uniqueCandidates = Array.from(new Set(candidateList));
+    const orFilter = uniqueCandidates.map((p) => `phone.eq.${p}`).join(',');
+
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(orFilter)
+      .limit(1);
+
+    if (error) {
+      console.error('Supabase phone search error:', error);
+      return { success: false, error: "Tizimda xatolik yuz berdi. Qaytadan urinib ko'ring." };
+    }
+
+    if (!users || users.length === 0) {
+      return {
+        success: false,
+        error: "Ushbu telefon raqamiga ega hisob topilmadi. Avval Telegram botimizda (/start) raqamingizni ulashing."
+      };
+    }
+
+    const user = users[0] as User;
+    const expectedPin = user.pin_code && user.pin_code.trim() ? user.pin_code.trim() : '0000';
+    if (pinInput.trim() !== expectedPin) {
+      return {
+        success: false,
+        error: "PIN-kod noto'g'ri! Standart PIN-kod: 0000 (agar o'zgartirmagan bo'lsangiz)."
+      };
+    }
+
+    // Ensure user has default wallets in Supabase if missing
+    try {
+      const { data: userWallets } = await supabase.from('wallets').select('id').eq('user_id', user.id);
+      if (!userWallets || userWallets.length === 0) {
+        await supabase.from('wallets').insert([
+          { id: `w-${user.id}-card`, user_id: user.id, name: 'Asosiy karta', type: 'uzcard', balance: 0, currency: 'UZS', color: '#23a887', is_default: 1 },
+          { id: `w-${user.id}-cash`, user_id: user.id, name: 'Naqd pul', type: 'cash', balance: 0, currency: 'UZS', color: '#38a169', is_default: 0 },
+          { id: `w-${user.id}-invest`, user_id: user.id, name: 'Jamgʻarma', type: 'invest', balance: 0, currency: 'UZS', color: '#7a5af8', is_default: 0 }
+        ]);
+      }
+    } catch {}
+
+    // Save session in localStorage
+    localStorage.setItem('hisobchi_user_id', user.id);
+    if (user.telegram_id) {
+      localStorage.setItem('hisobchi_telegram_id', user.telegram_id);
+      localStorage.setItem('hisobchi_current_tg_id', user.telegram_id);
+    }
+    localStorage.setItem('hisobchi_user_cache', JSON.stringify(user));
+
+    return { success: true, user };
+  } catch (err: any) {
+    console.error('loginWithPhoneAndPin error:', err);
+    return { success: false, error: err?.message || "Kutilmagan xatolik yuz berdi." };
   }
+}
+
+export function logoutUser() {
+  localStorage.removeItem('hisobchi_user_id');
+  localStorage.removeItem('hisobchi_user_cache');
+  localStorage.removeItem('hisobchi_wallets_cache');
+  localStorage.removeItem('hisobchi_categories_cache');
+  localStorage.removeItem('hisobchi_transactions_cache');
+  localStorage.removeItem('hisobchi_summary_cache');
+  localStorage.removeItem('hisobchi_current_tg_id');
+  localStorage.removeItem('hisobchi_telegram_id');
 }
 
 async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -292,8 +375,11 @@ export const api = {
     goals: Goal[];
     summary: FinancialSummary;
     articles: Article[];
-  }> {
+  } | null> {
     const userId = await getEffectiveUserId();
+    if (!userId) {
+      return null;
+    }
 
     try {
       const [userRes, walletsRes, catRes, txRes, debtsRes, goalsRes, articlesRes] = await Promise.all([
@@ -365,6 +451,9 @@ export const api = {
   },
 
   // Auth & Profile
+  loginWithPhoneAndPin,
+  logoutUser,
+  isTelegramEnv,
   async getUser(): Promise<User> {
     const userId = await getEffectiveUserId();
     try {

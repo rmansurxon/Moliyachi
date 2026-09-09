@@ -10,7 +10,8 @@ import {
   getDebts,
   addDebt,
   saveChatMessage,
-  resetAllBalancesAndTransactions
+  resetAllBalancesAndTransactions,
+  updateUserPhone
 } from './db.js';
 import { parseUzbekFinancialText, getAIConversationalReply, extractAmount } from './aiService.js';
 import { createWorker } from 'tesseract.js';
@@ -22,7 +23,8 @@ import {
   insertTransactionToSupabase,
   deleteTransactionFromSupabase,
   insertDebtToSupabase,
-  resetSupabaseBalancesAndTransactions
+  resetSupabaseBalancesAndTransactions,
+  updateUserPhoneInSupabase
 } from './supabase.js';
 
 export function createTelegramBot(token?: string, webAppUrl: string = 'https://dashboard.hisobchiai.uz') {
@@ -59,6 +61,12 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
     ]).resize();
   };
 
+  const getContactKeyboard = () => {
+    return Markup.keyboard([
+      [Markup.button.contactRequest('📱 Telefon raqamni ulashish')]
+    ]).resize().oneTime();
+  };
+
   // 1. /start Handler
   const handleStart = async (ctx: any) => {
     const from = ctx.from;
@@ -67,6 +75,20 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
       first_name: from.first_name,
       username: from.username
     });
+
+    // If user has not shared phone number yet, ask for contact
+    if (!user.phone) {
+      const askPhoneText =
+        `Assalomu alaykum, *${from.first_name}*! 👋\n\n` +
+        `Men *Hisobchi AI* — shaxsiy aqlli moliyaviy yordamchingizman. 🤖💰\n\n` +
+        `Iltimos, profilingizni faollashtirish va xavfsiz foydalanish uchun quyidagi tugma orqali *telefon raqamingizni ulashing* 👇`;
+
+      await ctx.reply(askPhoneText, {
+        parse_mode: 'Markdown',
+        ...getContactKeyboard()
+      });
+      return;
+    }
 
     const welcomeText =
       `Assalomu alaykum, *${from.first_name}*! 👋\n\n` +
@@ -258,6 +280,54 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
   bot.command('yordam', handleYordam);
   bot.command('help', handleYordam);
   bot.command('tozala', handleTozala);
+
+  // Handle Contact Sharing (User Phone Verification)
+  bot.on('contact', async (ctx: any) => {
+    const contact = ctx.message.contact;
+    const from = ctx.from;
+
+    if (!contact || !contact.phone_number) {
+      return ctx.reply('⚠️ Telefon raqami aniqlanmadi. Qaytadan urinib koʻring.');
+    }
+
+    // Verify contact belongs to the user if user_id is provided
+    if (contact.user_id && contact.user_id !== from.id) {
+      return ctx.reply('⚠️ Iltimos, pastdagi tugma orqali faqat oʻzingizning shaxsiy telefon raqamingizni ulashing.', {
+        ...getContactKeyboard()
+      });
+    }
+
+    let phone = contact.phone_number.trim();
+    if (!phone.startsWith('+')) {
+      phone = '+' + phone;
+    }
+
+    // 1. Update in SQLite
+    getOrCreateDefaultUser({
+      id: from.id,
+      first_name: from.first_name,
+      username: from.username,
+      phone
+    });
+    updateUserPhone(from.id, phone, '0000');
+
+    // 2. Update in Supabase
+    if (isSupabaseActive()) {
+      await updateUserPhoneInSupabase(from.id, phone, '0000');
+    }
+
+    const successText =
+      `🎉 *Tabriklaymiz, ${from.first_name}! Hisobingiz muvaffaqiyatli faollashtirildi!* ✅\n\n` +
+      `📱 *Telefon raqamingiz:* \`${phone}\`\n` +
+      `🔑 *Veb-brauzerdan (Chrome/Safari) kirish uchun PIN-kod:* \`0000\`\n` +
+      `_(PIN-kodni istalgan payt ilovaning "Sozlamalar" boʻlimida oʻzgartira olasiz)_\n\n` +
+      `🚀 *Telegram ichida esa parol kiritish shart emas* — quyidagi tugma orqali ilovangiz bir zumda ochiladi! 👇`;
+
+    await ctx.reply(successText, {
+      parse_mode: 'Markdown',
+      ...getMainKeyboard(from.id)
+    });
+  });
 
   // Handle Callback queries for Undo button
   bot.action(/^undo_tx_(.+)$/, async (ctx) => {

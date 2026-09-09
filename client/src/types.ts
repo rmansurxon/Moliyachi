@@ -8,6 +8,7 @@ export interface User {
   telegram_id?: string;
   first_name: string;
   username?: string;
+  phone?: string;
   currency: Currency;
   theme: Theme;
   language: Language;
