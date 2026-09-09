@@ -270,14 +270,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
       };
 
       setMessages((prev) => [...prev, aiMsg]);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const errText = err?.message || "Kechirasiz, vaqtinchalik xatolik yuz berdi. Qaytadan urinib ko'ring.";
       setMessages((prev) => [
         ...prev,
         {
           id: String(Date.now() + 1),
           sender: 'ai',
-          text: "Kechirasiz, vaqtinchalik xatolik yuz berdi. Qaytadan urinib ko'ring.",
+          text: errText,
           time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
         }
       ]);

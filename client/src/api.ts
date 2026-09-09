@@ -15,7 +15,8 @@ export function isTelegramEnv(): boolean {
 
 export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | 'error' | 'warning' = 'light') {
   try {
-    if (tg?.HapticFeedback) {
+    const isSupported = tg?.isVersionAtLeast ? tg.isVersionAtLeast('6.1') : false;
+    if (isSupported && tg?.HapticFeedback) {
       if (type === 'success' || type === 'error' || type === 'warning') {
         tg.HapticFeedback.notificationOccurred(type);
       } else {
@@ -249,8 +250,13 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
   };
 
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  
+  // AI endpoints need longer timeout (45s) because LLMs and Render cold-starts require time
+  const timeoutMs = endpoint.includes('/ai/') ? 45000 : 25000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const res = await fetch(url, {
@@ -265,6 +271,11 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     }
 
     return await res.json();
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error("Tarmoq vaqti tugadi (Timeout). Server uyg'onmoqda yoki sun'iy intellekt hisoblamoqda.");
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -1030,6 +1041,77 @@ export const api = {
     }
   },
 
+  async fallbackClientChat(message: string): Promise<any> {
+    const text = message.trim().toLowerCase();
+
+    // 1. Balans so'rovi
+    if (text.includes('balans') || text.includes('hisob') || text.includes('qancha pul')) {
+      try {
+        const wallets = await this.getWallets();
+        const total = wallets.reduce((sum, w) => sum + (w.balance || 0), 0);
+        const walletLines = wallets.map(w => `• ${w.name}: ${w.balance.toLocaleString('uz-UZ')} ${w.currency || 'UZS'}`).join('\n');
+        return {
+          success: true,
+          reply: `💰 **Umumiy balansingiz:** ${total.toLocaleString('uz-UZ')} UZS\n\n${walletLines}`,
+          transaction: null
+        };
+      } catch {}
+    }
+
+    // 2. Oddiy xarajat yoki daromadni aniqlash (masalan: "Tushlik 45000", "Taksi 20 ming", "Benzin 150000")
+    const numMatch = text.match(/(\d+[\d\s.,]*)\s*(ming|mln|so['`ʼ]m|uzs)?/i);
+    if (numMatch) {
+      let rawNum = numMatch[1].replace(/[\s.,]/g, '');
+      let amount = parseInt(rawNum, 10);
+      const unit = (numMatch[2] || '').toLowerCase();
+      if (unit.includes('ming')) amount *= 1000;
+      if (unit.includes('mln')) amount *= 1000000;
+
+      if (amount > 0 && amount < 1000000000) {
+        let category = 'Oziq-ovqat';
+        if (text.includes('taksi') || text.includes('benzin') || text.includes('yo\'l') || text.includes('yandex') || text.includes('transport')) {
+          category = 'Transport & Benzin';
+        } else if (text.includes('kiyim') || text.includes('shim') || text.includes('ko\'ylak') || text.includes('poyabzal')) {
+          category = 'Kiyim-kechak';
+        } else if (text.includes('svet') || text.includes('gaz') || text.includes('uy') || text.includes('ijara') || text.includes('kommunal')) {
+          category = 'Kommunal & Uy';
+        } else if (text.includes('oylik') || text.includes('maosh')) {
+          category = 'Oylik maosh';
+        }
+
+        const isIncome = text.includes('oylik') || text.includes('daromad') || text.includes('tushdi');
+        const type = isIncome ? 'income' : 'expense';
+
+        try {
+          const wallets = await this.getWallets();
+          const targetWallet = wallets.find(w => w.is_default === 1) || wallets[0];
+          if (targetWallet) {
+            const tx = await this.createTransaction({
+              balance_id: targetWallet.id,
+              amount,
+              type,
+              description: message,
+              category_label: category
+            });
+            return {
+              success: true,
+              reply: `✅ **${type === 'income' ? 'Daromad' : 'Xarajat'} qayd etildi!**\n💰 Summa: **${amount.toLocaleString('uz-UZ')} so'm**\n🏷 Toifa: ${category}\n💳 Hamyon: ${targetWallet.name}`,
+              transaction: tx
+            };
+          }
+        } catch (e) {
+          console.warn('Fallback transaction creation failed:', e);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      reply: "⏳ Server bilan aloqa o'rnatilmoqda (uyg'onish jarayonida). Iltimos, bir necha soniyadan so'ng qayta yuborib ko'ring yoki /start orqali botni yangilang.",
+      transaction: null
+    };
+  },
+
   async sendAIChat(message: string, history?: any[]) {
     const userId = await getEffectiveUserId();
     // Save user message to Supabase chat history immediately
@@ -1042,12 +1124,18 @@ export const api = {
       }]);
     } catch {}
 
-    // Route to Render backend for LLM parsing
-    const res = await request('/ai/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, history })
-    });
+    let res: any = null;
+    try {
+      // Route to Render backend for LLM parsing
+      res = await request('/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, history })
+      });
+    } catch (err: any) {
+      console.warn('Backend AI chat error, switching to resilient client fallback:', err?.message || err);
+      res = await this.fallbackClientChat(message);
+    }
 
     if (res?.reply) {
       try {
