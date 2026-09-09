@@ -44,10 +44,8 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
     console.error(`⚠️ Telegram bot update xatosi:`, err?.message || err);
   });
 
-  const getWebAppUrlForUser = (userId?: string | number) => {
-    if (!userId) return targetWebAppUrl;
-    const sep = targetWebAppUrl.includes('?') ? '&' : '?';
-    return `${targetWebAppUrl}${sep}tg_id=${userId}`;
+  const getWebAppUrlForUser = (_userId?: string | number) => {
+    return targetWebAppUrl;
   };
 
   // Reply Keyboard layout helper

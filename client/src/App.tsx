@@ -29,15 +29,17 @@ import { SubscriptionView } from './views/SubscriptionView';
 
 // Fallback initial data for instant zero-latency render (prevents PWA blank screen)
 const getInitialUser = (): User => {
-  const tgUser = tg?.initDataUnsafe?.user;
+  const isTg = api.isTelegramEnv();
+  const tgUser = isTg ? tg?.initDataUnsafe?.user : null;
   const currentTgId = tgUser?.id ? String(tgUser.id) : null;
 
   try {
     const cached = localStorage.getItem('hisobchi_user_cache');
-    if (cached) {
+    const savedUserId = localStorage.getItem('hisobchi_user_id');
+    if (cached && savedUserId) {
       const parsed = JSON.parse(cached);
-      // Validate that cached user belongs to current Telegram account
-      if (!currentTgId || parsed.telegram_id === currentTgId || parsed.id === `user-tg-${currentTgId}` || (currentTgId === '8724834222' && parsed.id === 'user-mansurxon')) {
+      // Validate that cached user belongs to current Telegram account if in Telegram
+      if (!isTg || parsed.telegram_id === currentTgId || parsed.id === `user-tg-${currentTgId}`) {
         return parsed;
       }
     }
@@ -58,12 +60,13 @@ const getInitialUser = (): User => {
 };
 
 const getInitialWallets = (): Wallet[] => {
-  const tgUser = tg?.initDataUnsafe?.user;
+  const isTg = api.isTelegramEnv();
+  const tgUser = isTg ? tg?.initDataUnsafe?.user : null;
   const currentTgId = tgUser?.id ? String(tgUser.id) : null;
   try {
     const cached = localStorage.getItem('hisobchi_wallets_cache');
     const cachedUserId = localStorage.getItem('hisobchi_user_id');
-    if (cached && (!currentTgId || cachedUserId?.includes(currentTgId) || (currentTgId === '8724834222' && cachedUserId === 'user-mansurxon'))) {
+    if (cached && cachedUserId && (!isTg || cachedUserId.includes(currentTgId || ''))) {
       return JSON.parse(cached);
     }
   } catch {}
@@ -72,24 +75,30 @@ const getInitialWallets = (): Wallet[] => {
 
 const getInitialCategories = (): Category[] => {
   try {
-    const cached = localStorage.getItem('hisobchi_categories_cache');
-    if (cached) return JSON.parse(cached);
+    if (localStorage.getItem('hisobchi_user_id')) {
+      const cached = localStorage.getItem('hisobchi_categories_cache');
+      if (cached) return JSON.parse(cached);
+    }
   } catch {}
   return [];
 };
 
 const getInitialTransactions = (): Transaction[] => {
   try {
-    const cached = localStorage.getItem('hisobchi_transactions_cache');
-    if (cached) return JSON.parse(cached);
+    if (localStorage.getItem('hisobchi_user_id')) {
+      const cached = localStorage.getItem('hisobchi_transactions_cache');
+      if (cached) return JSON.parse(cached);
+    }
   } catch {}
   return [];
 };
 
 const getInitialSummary = (): FinancialSummary | null => {
   try {
-    const cached = localStorage.getItem('hisobchi_summary_cache');
-    if (cached) return JSON.parse(cached);
+    if (localStorage.getItem('hisobchi_user_id')) {
+      const cached = localStorage.getItem('hisobchi_summary_cache');
+      if (cached) return JSON.parse(cached);
+    }
   } catch {}
   return null;
 };
@@ -146,10 +155,12 @@ export const App: React.FC = () => {
     }
   }, [theme]);
 
-  // Load all data from Supabase on mount
+  // Load all data from Supabase on mount or when authenticated
   useEffect(() => {
-    loadAllData();
-  }, []);
+    if (isAuthenticated) {
+      loadAllData();
+    }
+  }, [isAuthenticated]);
 
   const loadAllData = async () => {
     setIsSyncing(true);

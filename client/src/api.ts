@@ -6,10 +6,8 @@ export const tg = (typeof window !== 'undefined' && (window as any).Telegram?.We
 
 export function isTelegramEnv(): boolean {
   try {
-    if (tg && (tg.initDataUnsafe?.user?.id || (tg.initData && tg.initData.length > 0))) return true;
-    if (typeof window !== 'undefined' && window.location?.search) {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('tg_id')) return true;
+    if (tg && (tg.initDataUnsafe?.user?.id || (typeof tg.initData === 'string' && tg.initData.length > 0))) {
+      return true;
     }
   } catch {}
   return false;
@@ -31,32 +29,15 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | '
 
 const API_BASE = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api');
 
-// Auto-detect and persist ?tg_id=... from URL (when opened from Telegram Desktop into external browser)
-try {
-  if (typeof window !== 'undefined' && window.location?.search) {
-    const params = new URLSearchParams(window.location.search);
-    const qTgId = params.get('tg_id');
-    if (qTgId) {
-      localStorage.setItem('hisobchi_telegram_id', qTgId);
-    }
-  }
-} catch {}
-
 // Centralized request helper with Telegram Auto-Auth & persistence
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   try {
     const tgUser = tg?.initDataUnsafe?.user;
-    let tgId = tgUser?.id ? String(tgUser.id) : null;
+    const tgId = tgUser?.id ? String(tgUser.id) : null;
     if (tgId) {
-      localStorage.setItem('hisobchi_telegram_id', tgId);
       headers['x-telegram-id'] = tgId;
       headers['x-telegram-user'] = encodeURIComponent(JSON.stringify(tgUser));
-    } else {
-      const cachedTgId = localStorage.getItem('hisobchi_telegram_id');
-      if (cachedTgId) {
-        headers['x-telegram-id'] = cachedTgId;
-      }
     }
   } catch {}
 
@@ -72,15 +53,9 @@ export function getAuthHeaders(): Record<string, string> {
 
 export async function getEffectiveUserId(): Promise<string> {
   const currentTgUser = tg?.initDataUnsafe?.user;
-  let currentTgId = currentTgUser?.id ? String(currentTgUser.id) : null;
+  const currentTgId = currentTgUser?.id ? String(currentTgUser.id) : null;
 
-  if (!currentTgId && typeof window !== 'undefined' && window.location?.search) {
-    const params = new URLSearchParams(window.location.search);
-    const qTgId = params.get('tg_id');
-    if (qTgId) currentTgId = qTgId;
-  }
-
-  // 1. If opened inside Telegram or with a specific tg_id -> Instant Seamless Auto-Login
+  // 1. If opened inside genuine Telegram WebApp -> Instant Seamless Auto-Login
   if (currentTgId) {
     const prevTgId = localStorage.getItem('hisobchi_current_tg_id');
     if (prevTgId && prevTgId !== currentTgId) {
