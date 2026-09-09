@@ -7,11 +7,8 @@ import {
   Tag,
   FileText,
   BarChart3,
-  Sparkles,
   Users,
   Award,
-  BookOpen,
-  Crown,
   Settings,
   ChevronRight
 } from 'lucide-react';
@@ -27,11 +24,8 @@ export const MoreSectionsView: React.FC<MoreSectionsViewProps> = ({ onNavigate }
     { id: 'goals', label: 'Moliyaviy Maqsadlar', desc: 'Jamg\'arma rejalari', icon: Target, color: '#29c184' },
     { id: 'categories', label: 'Kategoriyalar', desc: 'Toifalar va byudjet limitlari', icon: Tag, color: '#ff8d28' },
     { id: 'reports', label: 'Hisobotlar & Eksport', desc: 'Excel (CSV) va audit', icon: FileText, color: '#06b6d4' },
-    { id: 'oy-yakuni', label: 'Oylik Yakun (Stories)', desc: 'Spotify wrapped uslubida', icon: Sparkles, color: '#7a5af8', badge: 'Yangi' },
     { id: 'together', label: 'Birga (Oilaviy hisob)', desc: 'Guruhlar va sheriklik byudjeti', icon: Users, color: '#ec4899' },
     { id: 'gamification', label: 'Yutuqlar & Gamifikatsiya', desc: 'Seriya, XP va vaucherlar', icon: Award, color: '#eab308' },
-    { id: 'articles', label: 'Moliyaviy Bilimlar', desc: 'Maqolalar va maslahatlar', icon: BookOpen, color: '#3b82f6' },
-    { id: 'paywall', label: 'Hisobchi AI Pro', desc: 'Premium imkoniyatlar', icon: Crown, color: '#f2c14e', badge: 'PRO' },
     { id: 'settings', label: 'Sozlamalar', desc: 'Valyuta, til va PIN xavfsizlik', icon: Settings, color: '#899098' }
   ];
 
@@ -66,11 +60,6 @@ export const MoreSectionsView: React.FC<MoreSectionsViewProps> = ({ onNavigate }
                     <h4 className="text-xs font-bold text-white light:text-[#1d2939] group-hover:text-[#29c184] transition-colors">
                       {sec.label}
                     </h4>
-                    {sec.badge && (
-                      <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase bg-[#29c184] text-black">
-                        {sec.badge}
-                      </span>
-                    )}
                   </div>
                   <p className="text-[11px] text-[#899098] mt-0.5">{sec.desc}</p>
                 </div>

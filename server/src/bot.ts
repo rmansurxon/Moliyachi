@@ -365,73 +365,12 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
     }
   });
 
-  // Voice message handler
-  bot.on('voice', async (ctx) => {
-    const user = getOrCreateDefaultUser({ id: ctx.from.id, first_name: ctx.from.first_name, username: ctx.from.username });
-    const wallets = getWallets(user.id);
-    const categories = getCategories(user.id);
-
-    await ctx.sendChatAction('typing');
-
-    try {
-      const duration = ctx.message.voice.duration;
-      let voiceTranscript = "Tushlikka 45 000 so'm ishlatdim";
-      if (duration > 4) {
-        voiceTranscript = "Benzinga 150 000 so'm to'ladim karta";
-      }
-
-      const parsed = parseUzbekFinancialText(voiceTranscript, categories);
-
-      if (parsed.isTransaction && parsed.amount > 0) {
-        const defaultWallet = wallets.find(w => w.is_default === 1) || wallets[0];
-        let targetWallet = defaultWallet;
-
-        if (parsed.preferredWalletKeyword) {
-          const kw = parsed.preferredWalletKeyword.toLowerCase();
-          const matched = wallets.find(w =>
-            w.name.toLowerCase().includes(kw) ||
-            w.type.toLowerCase().includes(kw)
-          );
-          if (matched) targetWallet = matched;
-        }
-
-        const savedTx = addTransaction({
-          user_id: user.id,
-          balance_id: targetWallet.id,
-          category_id: parsed.matchedCategoryId,
-          amount: parsed.amount,
-          type: parsed.type,
-          description: parsed.description,
-          category_label: `${parsed.categoryName} • ${targetWallet.name}`
-        });
-
-        if (isSupabaseActive()) {
-          insertTransactionToSupabase(savedTx).catch(() => {});
-        }
-
-        const reply =
-          `🎙 *Ovozli xabaringiz qabul qilindi:*\n\n` +
-          `🗣 _" ${voiceTranscript} "_\n\n` +
-          `✅ *${parsed.type === 'expense' ? 'Xarajat' : 'Daromad'} qayd etildi!*\n` +
-          `🏷 *Kategoriya:* ${parsed.categoryName}\n` +
-          `💰 *Summa:* ${parsed.amount.toLocaleString('uz-UZ')} soʻm\n` +
-          `💳 *Hamyon:* ${targetWallet.name}\n\n` +
-          `Hisobingiz muvaffaqiyatli yangilandi.`;
-
-        await ctx.reply(reply, {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.webApp('📱 Ilovada koʻrish', targetWebAppUrl),
-              Markup.button.callback('↩️ Bekor qilish', `undo_tx_${savedTx.id}`)
-            ]
-          ])
-        });
-      }
-    } catch (err: any) {
-      console.error('Voice processing error:', err);
-      ctx.reply("Ovozli xabarni tahlil qilishda xatolik yuz berdi. Iltimos, matn ko'rinishida yozing.");
-    }
+  // Voice & Audio messages disabled
+  bot.on(['voice', 'audio'], async (ctx) => {
+    await ctx.reply(
+      "ℹ️ Ovozli xabarlar orqali amaliyot kiritish o'chirilgan.\n\nIltimos, xabaringizni matn ko'rinishida yozing (masalan: *Tushlik 45000* yoki *Aliga 100 ming qarz berdim*).",
+      { parse_mode: 'Markdown' }
+    );
   });
 
   // Photo OCR with Tesseract.js

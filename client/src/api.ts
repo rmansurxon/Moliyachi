@@ -404,7 +404,13 @@ export const api = {
         wallet_type: t.wallets?.type
       }));
       const debts: Debt[] = debtsRes.data || [];
-      const goals: Goal[] = goalsRes.data || [];
+      const rawGoals = goalsRes.data || [];
+      const goals: Goal[] = rawGoals.map((g: any) => ({
+        ...g,
+        title: g.title || g.name || 'Maqsad',
+        target_amount: Number(g.target_amount) || 0,
+        current_amount: Number(g.current_amount) || 0
+      }));
       const articles: Article[] = articlesRes.data || [];
 
       const summary = computeFinancialSummary(transactions, 'month');
@@ -1181,6 +1187,50 @@ export const api = {
     } catch (err: any) {
       console.warn('Backend AI chat error, switching to resilient client fallback:', err?.message || err);
       res = await this.fallbackClientChat(message);
+    }
+
+    // Ensure transactions and debts from AI are immediately registered in user's active Supabase account
+    if (res?.transaction) {
+      try {
+        const wallets = await this.getWallets();
+        const activeWallet = wallets.find(w => w.id === res.transaction.balance_id) ||
+                             wallets.find(w => w.name.toLowerCase().includes((res.transaction.wallet_name || '').toLowerCase())) ||
+                             wallets.find(w => w.is_default === 1) ||
+                             wallets[0];
+
+        if (activeWallet) {
+          const { data: existingTx } = await supabase.from('transactions').select('id').eq('id', res.transaction.id).maybeSingle();
+          if (!existingTx) {
+            await supabase.from('transactions').insert([{
+              ...res.transaction,
+              user_id: userId,
+              balance_id: activeWallet.id
+            }]);
+
+            const currentBal = Number(activeWallet.balance) || 0;
+            const newBal = res.transaction.type === 'income'
+              ? currentBal + Number(res.transaction.amount)
+              : currentBal - Number(res.transaction.amount);
+
+            await supabase.from('wallets').update({ balance: newBal }).eq('id', activeWallet.id);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Direct client transaction sync warning:', syncErr);
+      }
+    }
+
+    if (res?.parsed?.action === 'debt' && res.parsed.debt) {
+      try {
+        await this.createDebt({
+          type: res.parsed.debt.type,
+          counterparty_name: res.parsed.debt.counterparty_name,
+          amount: Number(res.parsed.debt.amount),
+          notes: res.parsed.debt.notes || message
+        });
+      } catch (dErr) {
+        console.warn('Direct client debt sync warning:', dErr);
+      }
     }
 
     if (res?.reply) {

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api, triggerHaptic } from '../api';
-import { Sparkles, Send, Mic, CheckCircle2, AlertCircle, Camera, Loader2 } from 'lucide-react';
+import { Sparkles, Send, CheckCircle2, AlertCircle, Camera, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface Message {
@@ -20,12 +20,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [speechError, setSpeechError] = useState<string | null>(null);
   const [scanningReceipt, setScanningReceipt] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load persistent continuous chat history
@@ -46,21 +43,32 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
           }));
           setMessages(loaded);
         } else if (isMounted) {
+          // Default initial friendly greeting
           setMessages([
             {
-              id: 'initial',
+              id: '1',
               sender: 'ai',
-              text: "Assalomu alaykum! Men sizning shaxsiy moliyaviy yordamchingizman. 🤖\n\nXarajat yoki daromadingizni yozing yoki ovoz bilan gapiring (masalan: *\"Tushlik 45 000 so'm\"* yoki *\"5 000 000 oylik tushdi\"*). Shuningdek chek rasmini ham yuborishingiz mumkin.",
+              text: "Assalomu alaykum! Men sizning shaxsiy moliyaviy yordamchingizman. 🤖\n\nMenga erkin yozishingiz mumkin:\n• *\"Tushlik 45000\"* (xarajat)\n• *\"Oylik 5 000 000\"* (daromad)\n• *\"Aliga 100 ming qarz berdim\"* (qarz)\n• *\"Balansim qancha?\"* (hisobot)\n• Yoki pastdagi kamera tugmasi orqali chek rasmini yuklang!",
               time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
             }
           ]);
         }
-      } catch (err) {
-        console.error('History load error:', err);
+      } catch {
+        if (isMounted) {
+          setMessages([
+            {
+              id: '1',
+              sender: 'ai',
+              text: "Assalomu alaykum! Moliyaviy xarajat yoki daromadingizni yozing, darhol hisoblab boraman.",
+              time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+            }
+          ]);
+        }
       } finally {
         if (isMounted) setHistoryLoaded(true);
       }
     }
+
     loadHistory();
     return () => { isMounted = false; };
   }, []);
@@ -72,69 +80,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
-
-  // Initialize real Web Speech API
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'uz-UZ'; // Uzbek speech recognition
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setSpeechError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        console.log('Recognized speech:', transcript);
-        setInput(transcript);
-        setIsListening(false);
-        // Automatically send transcribed voice text
-        handleSend(transcript);
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
-        setIsListening(false);
-        if (event.error === 'not-allowed') {
-          setSpeechError('Mikrofon ruxsati berilmadi. Iltimos, brauzerda mikrofonni yoqing.');
-        } else if (event.error === 'no-speech') {
-          setSpeechError('Ovoz eshitilmadi. Qaytadan urinib ko\'ring.');
-        }
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-    }
-  }, []);
-
-  const handleToggleMic = () => {
-    triggerHaptic('medium');
-    setSpeechError(null);
-
-    if (!recognitionRef.current) {
-      // Fallback if browser doesn't have webkitSpeechRecognition
-      setSpeechError("Brauzeringizda ovoz tanish (SpeechRecognition) qo'llab-quvvatlanmaydi.");
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      try {
-        recognitionRef.current.start();
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  };
 
   const quickPrompts = [
     "Tushlikka 45 000 so'm",
@@ -255,7 +200,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
     try {
       const res = await api.sendAIChat(text, currentHistory);
 
-      if (res.transaction) {
+      if (res?.transaction || res?.parsed?.action === 'transaction' || res?.parsed?.action === 'debt' || res?.parsed?.action === 'transfer') {
         triggerHaptic('success');
         confetti({ particleCount: 30, spread: 50, origin: { y: 0.7 } });
         onTransactionCreated?.();
@@ -349,13 +294,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Speech Error Banner */}
-      {speechError && (
-        <div className="p-2 mb-2 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center gap-2 text-xs text-red-300">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{speechError}</span>
-        </div>
-      )}
 
       {/* Quick prompt suggestions */}
       <div className="py-2">
@@ -382,70 +320,43 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTransactionCreated }) => {
         className="hidden"
       />
 
-      {/* Input container with Speech, Camera & Send */}
+      {/* Input container with Camera & Send */}
       <div className="relative pt-1">
-        {isListening ? (
-          <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-[#29c184]/20 border border-[#29c184] animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-[#29c184] animate-ping"></span>
-              <span className="text-xs font-bold text-[#29c184]">
-                Mikrofon eshitmoqda... Gapiring!
-              </span>
-            </div>
-            <button
-              onClick={handleToggleMic}
-              className="px-3 py-1 rounded-xl bg-[#29c184] text-white text-xs font-bold shadow-md cursor-pointer"
-            >
-              To'xtatish
-            </button>
-          </div>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="flex items-center gap-2"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+          className="flex items-center gap-2"
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Masalan: Tushlik 45000 so'm..."
+            className="flex-1 px-4 py-3 rounded-2xl bg-[#1c2733] border border-[#263445] text-sm text-white focus:outline-none focus:border-[#29c184] shadow-inner"
+          />
+
+          {/* Camera / Receipt Scan button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-11 h-11 rounded-2xl bg-[#1c2733] border border-[#263445] flex items-center justify-center text-[#899098] hover:text-[#29c184] hover:border-[#29c184] transition-all cursor-pointer shrink-0"
+            title="Chek rasmini yuklash"
           >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Masalan: Tushlik 45000 so'm..."
-              className="flex-1 px-4 py-3 rounded-2xl bg-[#1c2733] border border-[#263445] text-sm text-white focus:outline-none focus:border-[#29c184] shadow-inner"
-            />
+            <Camera className="w-5 h-5" />
+          </button>
 
-            {/* Camera / Receipt Scan button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-11 h-11 rounded-2xl bg-[#1c2733] border border-[#263445] flex items-center justify-center text-[#899098] hover:text-[#29c184] hover:border-[#29c184] transition-all cursor-pointer shrink-0"
-              title="Chek rasmini yuklash"
-            >
-              <Camera className="w-5 h-5" />
-            </button>
-
-            {/* Real Mic button */}
-            <button
-              type="button"
-              onClick={handleToggleMic}
-              className="w-11 h-11 rounded-2xl bg-[#1c2733] border border-[#263445] flex items-center justify-center text-[#29c184] hover:bg-[#29c184] hover:text-white transition-all cursor-pointer shrink-0"
-              title="Ovoz bilan kiritish (Mikrofon)"
-            >
-              <Mic className="w-5 h-5" />
-            </button>
-
-            {/* Send button */}
-            <button
-              type="submit"
-              disabled={!input.trim() || loading}
-              className="w-11 h-11 rounded-2xl bg-[#29c184] hover:bg-[#25ab75] active:scale-95 disabled:opacity-40 disabled:scale-100 flex items-center justify-center text-white transition-all cursor-pointer shrink-0 shadow-lg shadow-[#29c184]/30"
-              title="Yuborish"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </form>
-        )}
+          {/* Send button */}
+          <button
+            type="submit"
+            disabled={!input.trim() || loading}
+            className="w-11 h-11 rounded-2xl bg-[#29c184] hover:bg-[#25ab75] active:scale-95 disabled:opacity-40 disabled:scale-100 flex items-center justify-center text-white transition-all cursor-pointer shrink-0 shadow-lg shadow-[#29c184]/30"
+            title="Yuborish"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </form>
       </div>
     </div>
   );

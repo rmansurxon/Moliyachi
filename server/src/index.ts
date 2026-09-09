@@ -35,6 +35,7 @@ import { createTelegramBot } from './bot.js';
 import multer from 'multer';
 import { createWorker } from 'tesseract.js';
 import {
+  supabase,
   isSupabaseActive,
   getArticlesFromSupabase,
   getAppTextsFromSupabase,
@@ -733,7 +734,38 @@ app.post(['/ai/chat', '/api/ai/chat'], async (req, res) => {
     }
   }
 
-  // 3. Save transaction if classified
+  // 3. Transfer action if classified
+  if (parsedData && parsedData.action === 'transfer' && parsedData.amount > 0) {
+    try {
+      const fromWalletName = (parsedData.walletName || '').toLowerCase();
+      const toWalletName = (parsedData.toWalletName || '').toLowerCase();
+      const fromW = wallets.find(w => w.name.toLowerCase().includes(fromWalletName)) || wallets.find(w => w.is_default === 1) || wallets[0];
+      const toW = wallets.find(w => w.id !== fromW?.id && w.name.toLowerCase().includes(toWalletName)) || wallets.find(w => w.id !== fromW?.id);
+
+      if (fromW && toW) {
+        transferBetweenWallets({
+          userId: user.id,
+          fromWalletId: fromW.id,
+          toWalletId: toW.id,
+          amount: parsedData.amount,
+          description: parsedData.description || `O'tkazma: ${fromW.name} -> ${toW.name}`
+        });
+
+        if (isSupabaseActive() && supabase) {
+          try {
+            const { data: sfw } = await supabase.from('wallets').select('balance').eq('id', fromW.id).single();
+            const { data: stw } = await supabase.from('wallets').select('balance').eq('id', toW.id).single();
+            if (sfw) await supabase.from('wallets').update({ balance: sfw.balance - parsedData.amount }).eq('id', fromW.id);
+            if (stw) await supabase.from('wallets').update({ balance: stw.balance + parsedData.amount }).eq('id', toW.id);
+          } catch {}
+        }
+      }
+    } catch (e: any) {
+      console.error('Transfer execution error:', e.message);
+    }
+  }
+
+  // 4. Save transaction if classified
   let savedTx = null;
   if (parsedData && (parsedData.action === 'transaction' || parsedData.isTransaction) && parsedData.amount > 0) {
     const defaultWallet = wallets.find(w => w.is_default === 1) || wallets[0];
@@ -765,7 +797,11 @@ app.post(['/ai/chat', '/api/ai/chat'], async (req, res) => {
       });
 
       if (isSupabaseActive()) {
-        insertTransactionToSupabase(savedTx).catch(e => console.error('Supabase transaction sync error:', e));
+        try {
+          await insertTransactionToSupabase(savedTx);
+        } catch (e: any) {
+          console.error('Supabase transaction sync error:', e.message);
+        }
       }
     }
   }

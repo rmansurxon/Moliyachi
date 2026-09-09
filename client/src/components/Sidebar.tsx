@@ -10,7 +10,6 @@ import {
   Tag,
   BarChart3,
   FileText,
-  BookOpen,
   Settings
 } from 'lucide-react';
 
@@ -30,7 +29,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onChangeTab, class
     { id: 'categories', label: 'Kategoriyalar', icon: Tag },
     { id: 'stats', label: 'Statistika', icon: BarChart3 },
     { id: 'reports', label: 'Hisobotlar', icon: FileText },
-    { id: 'articles', label: 'Bilimlar', icon: BookOpen },
     { id: 'settings', label: 'Sozlamalar', icon: Settings }
   ];
 

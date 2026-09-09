@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { api, triggerHaptic } from '../api';
-import { Settings, Globe, DollarSign, Lock, Moon, Sun, Crown, Shield, Smartphone, Check, Phone, LogOut } from 'lucide-react';
+import { Settings, Globe, DollarSign, Lock, Moon, Sun, Shield, Smartphone, Check, Phone, LogOut } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface SettingsViewProps {
@@ -55,37 +55,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <p className="text-xs text-[#899098]">Valyuta, til, xavfsizlik va mavzuni boshqarish</p>
       </div>
 
-      {/* Pro Subscription Banner */}
-      <div
-        onClick={() => {
-          triggerHaptic('medium');
-          onOpenPaywall();
-        }}
-        className="p-4 rounded-3xl bg-gradient-to-r from-[#f2c14e]/20 via-[#ff8d28]/20 to-[#29c184]/20 border border-[#f2c14e]/40 flex items-center justify-between cursor-pointer active:scale-98 transition-transform shadow-lg group"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#f2c14e] to-[#ff8d28] flex items-center justify-center text-black font-black shadow-md">
-            <Crown className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h4 className="text-xs font-black text-white light:text-[#1d2939] uppercase tracking-wider">
-                Hisobchi AI Pro
-              </h4>
-              <span className="px-1.5 py-0.2 rounded text-[8px] bg-[#f2c14e] text-black font-black uppercase">
-                Premium
-              </span>
-            </div>
-            <p className="text-[11px] text-[#b6bfd0] mt-0.5">
-              Cheksiz AI chat, chek skaneri va oylik tahlil
-            </p>
-          </div>
-        </div>
-
-        <button className="px-3 py-1.5 rounded-xl bg-[#f2c14e] text-black text-xs font-black shadow-sm group-hover:bg-[#e0b040] transition-colors cursor-pointer">
-          Ko'rish
-        </button>
-      </div>
 
       {/* Currency Setting */}
       <div className="p-4 rounded-3xl bg-[#213040] light:bg-white border border-[#354454] space-y-2">

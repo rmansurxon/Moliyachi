@@ -5,10 +5,10 @@ import { Icon } from '../components/Icon';
 import { BarChart3, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react';
 
 interface StatisticsViewProps {
-  onOpenMonthlyWrap: () => void;
+  onOpenMonthlyWrap?: () => void;
 }
 
-export const StatisticsView: React.FC<StatisticsViewProps> = ({ onOpenMonthlyWrap }) => {
+export const StatisticsView: React.FC<StatisticsViewProps> = () => {
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month');
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
