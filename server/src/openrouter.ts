@@ -1,75 +1,122 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { Category } from './types.js';
+import { Category, Wallet } from './types.js';
 
 dotenv.config();
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-001';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b';
 
 export function isOpenRouterConfigured(): boolean {
   return !!OPENROUTER_API_KEY && OPENROUTER_API_KEY.trim().length > 10;
 }
 
 export interface OpenRouterFinancialResponse {
-  isTransaction: boolean;
-  type: 'expense' | 'income' | 'transfer';
-  amount: number;
-  currency: string;
-  categoryName: string;
-  description: string;
-  replyText: string;
+  action: 'transaction' | 'debt' | 'none';
+  isTransaction?: boolean;
+  type?: 'expense' | 'income' | 'transfer';
+  amount?: number;
+  currency?: string;
+  categoryName?: string;
+  walletName?: string;
+  description?: string;
+  replyText?: string;
+  debt?: {
+    type: 'lent' | 'borrowed';
+    counterparty_name: string;
+    amount: number;
+    due_date?: string | null;
+    notes?: string | null;
+  };
 }
 
 /**
- * Calls OpenRouter AI to parse Uzbek financial queries or provide smart advice
+ * Calls OpenRouter AI to parse Uzbek financial queries, manage debts/expenses, or provide smart advice
  */
 export async function callOpenRouterAI(
   userQuery: string,
   categories: Category[],
   summary: { totalBalance: number; totalExpense: number; totalIncome: number; categoryStats: any[] },
-  conversationHistory: { role: 'user' | 'assistant'; content: string }[] = []
+  conversationHistory: { role?: string; sender?: string; content?: string; text?: string }[] = [],
+  wallets: Wallet[] = []
 ): Promise<{ text: string; parsedData?: OpenRouterFinancialResponse }> {
   if (!isOpenRouterConfigured()) {
     throw new Error('OPENROUTER_API_KEY belgilanmagan');
   }
 
-  const categoryNames = categories.map(c => c.name).join(', ');
+  const categoryNames = categories.map(c => c.name).join(', ') || 'Oziq-ovqat, Transport & Benzin, Kiyim-kechak, Kommunal & Uy, Oylik maosh, Boshqa daromad';
+  const walletNames = wallets.map(w => w.name).join(', ') || 'Asosiy karta, Naqd pul, Jamgʻarma';
 
-  const systemPrompt = `Sen "Hisobchi AI" ilovasining aqlli moliyaviy yordamchisisan.
-Sening vazifang — foydalanuvchining o'zbek tilidagi xabarlarini tahlil qilish, daromad va xarajatlarini hisobga olish va moliyaviy maslahatlar berish.
+  const systemPrompt = `Sen "Hisobchi AI" platformasining oliy darajadagi aqlli, do'stona va tajribali moliyaviy maslahatchisisan.
+Sening vazifang — foydalanuvchining o'zbek tilidagi (yoki aralash) xabarlarini tahlil qilish, daromad/xarajatlarni hisobga olish, qarz munosabatlarini yuritish va professional moliyaviy maslahatlar berish.
 
-Mavjud toifalar ro'yxati: [${categoryNames}]
-Foydalanuvchining joriy umumiy balansi: ${summary.totalBalance.toLocaleString('uz-UZ')} UZS.
-Joriy oy xarajati: ${summary.totalExpense.toLocaleString('uz-UZ')} UZS, daromadi: ${summary.totalIncome.toLocaleString('uz-UZ')} UZS.
+MAVJUD TOIFALAR: [${categoryNames}]
+MAVJUD HAMYONLAR: [${walletNames}]
+FOYDALANUVCHI MOLIYAVIY HOLATI:
+- Joriy umumiy balans: ${summary.totalBalance.toLocaleString('uz-UZ')} UZS
+- Ushbu oydagi jami xarajat: ${summary.totalExpense.toLocaleString('uz-UZ')} UZS
+- Ushbu oydagi jami daromad: ${summary.totalIncome.toLocaleString('uz-UZ')} UZS
 
-Qoidalar:
-1. Agar foydalanuvchi xarajat, daromad yoki pul sarflagani/olganini aytsa (masalan: "Tushlikka 45 000 so'm ishlatdim", "Oylik tushdi 5 mln", "Benzin 120 ming"):
+QOIDALAR:
+
+1. XARAJAT YOKI DAROMAD BO'LSA (masalan: "Tushlikka 45 000 so'm ishlatdim", "Oylik tushdi 6 mln karta", "Benzin 150 ming", "100 dollar almashtirdim"):
    - Summani aniq raqamga aylantir (ming = 000, mln = 000000).
-   - Eng mos toifani tanla.
-   - Javobingni oxirida doim quyidagi JSON blokni qo'sh:
+   - Mavjud toifalar ichidan eng to'g'risini tanla.
+   - Qaysi karta yoki hamyon aytilgan bo'lsa (karta, naqd, uzcard va h.k.) mos keluvchi hamyon nomini tanla.
+   - Javobing oxirida doim quyidagi JSON blokni qo'sh:
    \`\`\`json
    {
+     "action": "transaction",
      "is_transaction": true,
      "type": "expense" yoki "income",
      "amount": 45000,
      "currency": "UZS",
      "category": "Oziq-ovqat",
+     "wallet": "Asosiy karta",
      "description": "Tushlik",
-     "reply": "Do'stona va chiroyli o'zbekcha tasdiq matni"
+     "reply": "Do'stona qisqa tasdiq xabari"
    }
    \`\`\`
 
-2. Agar foydalanuvchi umumiy savol bersa, maslahat so'rasa yoki balansini so'rasa:
-   - Do'stona, aniq va foydali moliyaviy maslahat ber.
-   - JSON blok qo'shish shart emas, yoki "is_transaction": false deb ber.
+2. QARZ MUNOSABATI BO'LSA (masalan: "Aliga 200 ming qarz berdim", "Validan 500 ming qarz oldim 25-sanagacha", "Umar akadan 1 mln qarz oldim"):
+   - Qarz turini aniqla: "lent" (men qarz berdim, menga qaytarishadi) yoki "borrowed" (men qarz oldim, men qaytarishim kerak).
+   - Odamning ismini counterparty_name qilib ol.
+   - Javobing oxirida quyidagi JSON blokni qo'sh:
+   \`\`\`json
+   {
+     "action": "debt",
+     "debt": {
+       "type": "lent" yoki "borrowed",
+       "counterparty_name": "Ali",
+       "amount": 200000,
+       "due_date": "2026-09-25",
+       "notes": "Qarz berildi"
+     },
+     "reply": "Ali nomiga 200 000 so'm qarz muvaffaqiyatli qayd etildi."
+   }
+   \`\`\`
 
-3. O'zbek tilida (lotin alifbosida), samimiy va professional javob qaytar. Emoji lardan o'rinli foydalan.`;
+3. SAVOLLAR, MASLAHAT YOKI UMUMIY SUHBAT BO'LSA (masalan: "Salom", "Qancha pulim qoldi?", "Qanday tejashim mumkin?", "Bu oy qayerga eng ko'p ketdi?"):
+   - Foydalanuvchiga do'stona, samimiy va moliyaviy jihatdan aniq ma'lumotlar bilan javob qaytar.
+   - Balans so'ralsa yuqoridagi joriy balansni ko'rsat.
+   - JSON blok qo'shish shart emas yoki:
+   \`\`\`json
+   {
+     "action": "none"
+   }
+   \`\`\`
+
+O'zbek tilida (lotin alifbosida), chiroyli formatda javob ber. Emojilardan me'yorida foydalan.`;
 
   try {
+    const formattedHistory = conversationHistory.slice(-8).map(m => ({
+      role: (m.role || m.sender === 'user') ? 'user' : 'assistant',
+      content: m.content || m.text || ''
+    })).filter(m => m.content.trim().length > 0);
+
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...conversationHistory.slice(-5),
+      ...formattedHistory,
       { role: 'user', content: userQuery }
     ];
 
@@ -79,7 +126,7 @@ Qoidalar:
         model: OPENROUTER_MODEL,
         messages,
         temperature: 0.3,
-        max_tokens: 800
+        max_tokens: 1000
       },
       {
         headers: {
@@ -88,7 +135,7 @@ Qoidalar:
           'X-Title': 'Hisobchi AI Assistant',
           'Content-Type': 'application/json'
         },
-        timeout: 15000
+        timeout: 25000
       }
     );
 
@@ -99,23 +146,48 @@ Qoidalar:
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[1]);
-        if (parsed.is_transaction && parsed.amount > 0) {
-          const cleanText = replyContent.replace(/```json[\s\S]*?```/, '').trim();
+        const cleanText = replyContent.replace(/```json[\s\S]*?```/, '').trim();
+
+        if (parsed.action === 'debt' && parsed.debt && parsed.debt.amount > 0) {
           return {
-            text: cleanText || parsed.reply || `✅ ${parsed.type === 'expense' ? 'Xarajat' : 'Daromad'} qayd etildi: ${parsed.amount.toLocaleString('uz-UZ')} UZS (${parsed.category})`,
+            text: cleanText || parsed.reply || `🤝 ${parsed.debt.counterparty_name} nomiga ${parsed.debt.amount.toLocaleString('uz-UZ')} UZS qarz qayd etildi.`,
             parsedData: {
+              action: 'debt',
+              debt: {
+                type: parsed.debt.type === 'borrowed' ? 'borrowed' : 'lent',
+                counterparty_name: parsed.debt.counterparty_name || "Noma'lum shaxs",
+                amount: Number(parsed.debt.amount),
+                due_date: parsed.debt.due_date || null,
+                notes: parsed.debt.notes || userQuery
+              },
+              replyText: parsed.reply || cleanText
+            }
+          };
+        }
+
+        if ((parsed.action === 'transaction' || parsed.is_transaction) && parsed.amount > 0) {
+          return {
+            text: cleanText || parsed.reply || `✅ ${parsed.type === 'income' ? 'Daromad' : 'Xarajat'} qayd etildi: ${parsed.amount.toLocaleString('uz-UZ')} UZS (${parsed.category || 'Xarid'})`,
+            parsedData: {
+              action: 'transaction',
               isTransaction: true,
               type: parsed.type === 'income' ? 'income' : 'expense',
               amount: Number(parsed.amount),
               currency: parsed.currency || 'UZS',
               categoryName: parsed.category || 'Boshqa xarajatlar',
+              walletName: parsed.wallet || 'Asosiy karta',
               description: parsed.description || userQuery,
               replyText: parsed.reply || cleanText
             }
           };
         }
+
+        return {
+          text: cleanText || replyContent,
+          parsedData: { action: 'none' }
+        };
       } catch (e) {
-        console.warn('JSON parse error from OpenRouter:', e);
+        console.warn('JSON parse error from OpenRouter response:', e);
       }
     }
 

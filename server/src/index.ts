@@ -663,7 +663,7 @@ app.get('/api/ai/chat/history', async (req, res) => {
   }
 });
 
-app.post('/api/ai/chat', async (req, res) => {
+app.post(['/ai/chat', '/api/ai/chat'], async (req, res) => {
   const user = (req as any).user;
   const { message, history } = req.body;
 
@@ -681,35 +681,33 @@ app.post('/api/ai/chat', async (req, res) => {
   const wallets = getWallets(user.id);
   const summary = getFinancialSummary(user.id, 'month');
 
-  // 1. Run ultra-fast 99.9% deterministic Uzbek Financial NLP engine first
-  const localReply = getAIConversationalReply(message, categories, summary);
   let replyText = '';
   let parsedData: any = null;
-  let aiSource = 'local-nlp';
+  let aiSource = 'openrouter';
 
-  if (localReply.isAlgorithmic) {
-    replyText = localReply.text;
-    parsedData = localReply.parsedData;
-    aiSource = 'local-nlp';
-  } else if (isOpenRouterConfigured()) {
-    // 0.1% edge case: complex open-ended query not covered by deterministic rules
+  // 1. PRIMARY AI BRAIN: OpenRouter LLM
+  if (isOpenRouterConfigured()) {
     try {
-      const aiRes = await callOpenRouterAI(message, categories, summary, history);
+      const aiRes = await callOpenRouterAI(message, categories, summary, history, wallets);
       replyText = aiRes.text;
       parsedData = aiRes.parsedData;
       aiSource = 'openrouter';
     } catch (err: any) {
-      console.warn('OpenRouter xatosi, mahalliy NLP ga o\'tilmoqda:', err.message);
+      console.warn('OpenRouter vaqtincha javob bermadi, mahalliy zaxira NLP ga o\'tilmoqda:', err.message);
+      const localReply = getAIConversationalReply(message, categories, summary);
       replyText = localReply.text;
       parsedData = localReply.parsedData;
+      aiSource = 'local-nlp';
     }
   } else {
+    const localReply = getAIConversationalReply(message, categories, summary);
     replyText = localReply.text;
     parsedData = localReply.parsedData;
+    aiSource = 'local-nlp';
   }
 
   // 2. If debt action detected, save debt
-  if (parsedData && parsedData.action === 'save_debt' && parsedData.debt) {
+  if (parsedData && (parsedData.action === 'debt' || parsedData.action === 'save_debt') && parsedData.debt) {
     try {
       const savedDebt = addDebt({
         user_id: user.id,
@@ -728,12 +726,12 @@ app.post('/api/ai/chat', async (req, res) => {
 
   // 3. Save transaction if classified
   let savedTx = null;
-  if (parsedData && parsedData.isTransaction && parsedData.amount > 0) {
+  if (parsedData && (parsedData.action === 'transaction' || parsedData.isTransaction) && parsedData.amount > 0) {
     const defaultWallet = wallets.find(w => w.is_default === 1) || wallets[0];
     let targetWallet = defaultWallet;
 
-    if (parsedData.preferredWalletKeyword) {
-      const kw = parsedData.preferredWalletKeyword.toLowerCase();
+    if (parsedData.walletName || parsedData.preferredWalletKeyword) {
+      const kw = (parsedData.walletName || parsedData.preferredWalletKeyword).toLowerCase();
       const matched = wallets.find(w =>
         w.name.toLowerCase().includes(kw) ||
         w.type.toLowerCase().includes(kw)
@@ -758,12 +756,12 @@ app.post('/api/ai/chat', async (req, res) => {
       });
 
       if (isSupabaseActive()) {
-        insertTransactionToSupabase(savedTx).catch(e => console.error('Supabase tx sync error:', e));
+        insertTransactionToSupabase(savedTx).catch(e => console.error('Supabase transaction sync error:', e));
       }
     }
   }
 
-  // Save AI response to persistent history
+  // 4. Save AI response to persistent chat history
   saveChatMessage(user.id, 'ai', replyText, savedTx);
   if (isSupabaseActive()) {
     saveChatMessageToSupabase(user.id, 'ai', replyText, savedTx).catch(() => {});

@@ -560,28 +560,68 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
       saveChatMessageToSupabase(user.id, 'user', text).catch(() => {});
     }
 
-    // 1. Run 99.9% deterministic Uzbek Financial NLP parser
-    const parsed = parseUzbekFinancialText(text, categories);
+    // 1. PRIMARY AI BRAIN: OpenRouter LLM
+    let replyText = '';
+    let parsedData: any = null;
+    let isProcessedByAI = false;
+
+    if (isOpenRouterConfigured()) {
+      try {
+        await ctx.sendChatAction('typing');
+        const summary = getFinancialSummary(user.id, 'month');
+        const aiRes = await callOpenRouterAI(text, categories, summary, [], wallets);
+        replyText = aiRes.text;
+        parsedData = aiRes.parsedData;
+        isProcessedByAI = true;
+      } catch (err: any) {
+        console.warn('Telegram OpenRouter xatosi, mahalliy zaxira NLP ga o\'tilmoqda:', err?.message || err);
+      }
+    }
+
+    // Fallback to local deterministic NLP if OpenRouter was not available or threw an error
+    if (!isProcessedByAI) {
+      const parsed = parseUzbekFinancialText(text, categories);
+      if (parsed.action === 'save_debt' && parsed.debt) {
+        parsedData = { action: 'debt', debt: parsed.debt, replyText: parsed.replyMessage };
+      } else if (parsed.isTransaction && parsed.amount > 0) {
+        parsedData = {
+          action: 'transaction',
+          isTransaction: true,
+          amount: parsed.amount,
+          type: parsed.type,
+          description: parsed.description,
+          categoryName: parsed.categoryName,
+          preferredWalletKeyword: parsed.preferredWalletKeyword,
+          replyText: parsed.replyMessage
+        };
+      } else {
+        const summary = getFinancialSummary(user.id, 'month');
+        const localReply = getAIConversationalReply(text, categories, summary);
+        replyText = localReply.text;
+        parsedData = localReply.parsedData;
+      }
+    }
 
     // If debt action detected
-    if (parsed.action === 'save_debt' && parsed.debt) {
+    if (parsedData && (parsedData.action === 'debt' || parsedData.action === 'save_debt') && parsedData.debt) {
       try {
         const savedDebt = addDebt({
           user_id: user.id,
-          type: parsed.debt.type,
-          counterparty_name: parsed.debt.counterparty_name,
-          amount: parsed.debt.amount,
-          notes: parsed.debt.notes
+          type: parsedData.debt.type,
+          counterparty_name: parsedData.debt.counterparty_name,
+          amount: parsedData.debt.amount,
+          notes: parsedData.debt.notes
         });
         if (isSupabaseActive()) {
           insertDebtToSupabase(savedDebt).catch(() => {});
         }
-        saveChatMessage(user.id, 'ai', parsed.replyMessage);
+        const debtReply = parsedData.replyText || replyText || `🤝 *Qarz qayd etildi:* ${parsedData.debt.counterparty_name} ga ${parsedData.debt.amount.toLocaleString('uz-UZ')} so'm.`;
+        saveChatMessage(user.id, 'ai', debtReply);
         if (isSupabaseActive()) {
-          saveChatMessageToSupabase(user.id, 'ai', parsed.replyMessage).catch(() => {});
+          saveChatMessageToSupabase(user.id, 'ai', debtReply).catch(() => {});
         }
 
-        return ctx.reply(parsed.replyMessage, {
+        return ctx.reply(debtReply, {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
             [Markup.button.webApp('🤝 Qarzlarda koʻrish', targetWebAppUrl)]
@@ -593,12 +633,12 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
     }
 
     // If transaction recognized (expense or income)
-    if (parsed.isTransaction && parsed.amount > 0) {
+    if (parsedData && (parsedData.action === 'transaction' || parsedData.isTransaction) && parsedData.amount > 0) {
       const defaultWallet = wallets.find(w => w.is_default === 1) || wallets[0];
       let targetWallet = defaultWallet;
 
-      if (parsed.preferredWalletKeyword) {
-        const kw = parsed.preferredWalletKeyword.toLowerCase();
+      if (parsedData.walletName || parsedData.preferredWalletKeyword) {
+        const kw = (parsedData.walletName || parsedData.preferredWalletKeyword).toLowerCase();
         const matched = wallets.find(w =>
           w.name.toLowerCase().includes(kw) ||
           w.type.toLowerCase().includes(kw)
@@ -606,27 +646,34 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
         if (matched) targetWallet = matched;
       }
 
+      const cat = categories.find(c =>
+        c.id === parsedData.matchedCategoryId ||
+        c.name.toLowerCase().includes((parsedData.categoryName || '').toLowerCase())
+      ) || categories[0];
+
       const savedTx = addTransaction({
         user_id: user.id,
         balance_id: targetWallet.id,
-        category_id: parsed.matchedCategoryId,
-        amount: parsed.amount,
-        type: parsed.type,
-        description: parsed.description,
-        category_label: `${parsed.categoryName} • ${targetWallet.name}`
+        category_id: cat?.id,
+        amount: parsedData.amount,
+        type: parsedData.type || 'expense',
+        description: parsedData.description || text,
+        category_label: `${cat?.name || 'Toifa'} • ${targetWallet.name}`
       });
 
       if (isSupabaseActive()) {
         insertTransactionToSupabase(savedTx).catch(() => {});
       }
 
+      const txReply = parsedData.replyText || replyText || `✅ *${savedTx.type === 'income' ? 'Daromad' : 'Xarajat'} qayd etildi!*\n💰 *Summa:* ${savedTx.amount.toLocaleString('uz-UZ')} so'm\n💳 *Hamyon:* ${targetWallet.name}`;
+
       // Save bot confirmation to continuous persistent chat history
-      saveChatMessage(user.id, 'ai', parsed.replyMessage, savedTx);
+      saveChatMessage(user.id, 'ai', txReply, savedTx);
       if (isSupabaseActive()) {
-        saveChatMessageToSupabase(user.id, 'ai', parsed.replyMessage, savedTx).catch(() => {});
+        saveChatMessageToSupabase(user.id, 'ai', txReply, savedTx).catch(() => {});
       }
 
-      return ctx.reply(parsed.replyMessage, {
+      return ctx.reply(txReply, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
@@ -637,29 +684,7 @@ export function createTelegramBot(token?: string, webAppUrl: string = 'https://d
       });
     }
 
-    // Otherwise, conversational / questions handling
-    const summary = getFinancialSummary(user.id, 'month');
-    const aiReply = getAIConversationalReply(text, categories, summary);
-    let replyText = '';
-
-    // 99.9% deterministic rule: if algorithmic answer exists, use it immediately with zero delay
-    if (aiReply.isAlgorithmic) {
-      replyText = aiReply.text;
-    } else if (isOpenRouterConfigured()) {
-      // 0.1% edge case: open conversational query
-      try {
-        await ctx.sendChatAction('typing');
-        const aiRes = await callOpenRouterAI(text, categories, summary);
-        replyText = aiRes.text;
-      } catch (e: any) {
-        console.warn('Telegram OpenRouter fallback:', e?.message || e);
-        replyText = aiReply.text;
-      }
-    } else {
-      replyText = aiReply.text;
-    }
-
-    // Save bot reply to persistent chat history
+    // General conversational reply from AI
     saveChatMessage(user.id, 'ai', replyText);
     if (isSupabaseActive()) {
       saveChatMessageToSupabase(user.id, 'ai', replyText).catch(() => {});

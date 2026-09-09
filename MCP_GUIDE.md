@@ -38,19 +38,22 @@ deb yozsangiz, AI avtomatik tarzda sizning MCP serveringiz orqali real hisoblari
 
 ---
 
-### 🛠️ MCP Serverimiz taqdim etadigan Tool (Asbob)lar (9 ta):
+### 🛠️ MCP Serverimiz taqdim etadigan Tool (Asbob)lar (11 ta):
 
 | Tool Nomi | Vazifasi |
 | :--- | :--- |
+| `authenticate` | 🔒 **Xavfsiz Kirish**: Telefon raqami va 4 xonali PIN orqali profilga ulanish |
+| `check_auth` | 🔍 Joriy MCP sessiyasining autentifikatsiya holatini tekshirish |
 | `get_balance` | Barcha hamyonlar (Uzcard, Humo, Naqd, Dollar) va umumiy balansni olish |
 | `add_transaction` | Yangi xarajat yoki daromadni AI orqali kiritish (balansni yangilash bilan) |
 | `update_transaction` | Mavjud amaliyotni tahrirlash va hamyon balansini to'g'ri qayta hisoblash |
 | `delete_transaction` | Amaliyotni o'chirish va hamyon balansini dastlabki holatiga qaytarish (revert) |
 | `get_transactions` | Oxirgi tranzaksiyalar ro'yxati va filtrlash |
 | `get_financial_summary` | Oylik tahlil, xarajatlar nisbati va eng ko'p pul ketgan toifalar |
-| `get_debts` | Faol qarzlar daftari (kimdan qancha olish yoki berish kerak) |
-| `get_goals` | Jamg'arma maqsadlari va to'plangan foiz |
-| `transfer_funds` | Kartalar o'rtasida pul o'tkazish |
+| `get_debts` | Qarz daftari (kimdan qancha haq bor yoki kimga qarz berish kerak) |
+| `get_goals` | Jamg'arma maqsadlari va reja foizi |
+| `transfer_funds` | Kartalar/hamyonlar o'rtasida pul o'tkazish |
+> 🔒 **Xavfsizlik eslatmasi**: Har bir yangi MCP ulanishi (Claude Desktop, Cursor yoki ChatGPT SSE) standart holda `unauthenticated` (tizimga kirmagan) bo'ladi. Begona foydalanuvchi hech kimning profilini ko'ra olmaydi. Foydalanuvchi `authenticate({ phone: "+99890...", pin: "0000" })` vositasini chaqirganidan so'nggina uning shaxsiy hisoblari ochiladi.
 
 ---
 
