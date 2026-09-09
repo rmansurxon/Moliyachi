@@ -923,32 +923,66 @@ export const api = {
   async getGoals(): Promise<Goal[]> {
     const userId = await getEffectiveUserId();
     try {
-      const { data } = await supabase.from('goals').select('*').eq('user_id', userId).order('created_at', { ascending: false });
-      if (data) return data;
+      const { data, error } = await supabase
+        .from('goals')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        return data.map((g: any) => ({
+          ...g,
+          title: g.title || g.name || 'Maqsad',
+          target_amount: Number(g.target_amount) || 0,
+          current_amount: Number(g.current_amount) || 0
+        }));
+      }
     } catch {}
 
-    const data = await request<{ success: boolean; goals: Goal[] }>('/goals');
-    return data.goals || [];
+    try {
+      const data = await request<{ success: boolean; goals: Goal[] }>('/goals');
+      return (data.goals || []).map((g: any) => ({
+        ...g,
+        title: g.title || g.name || 'Maqsad',
+        target_amount: Number(g.target_amount) || 0,
+        current_amount: Number(g.current_amount) || 0
+      }));
+    } catch {
+      return [];
+    }
   },
 
   async createGoal(goal: Partial<Goal>): Promise<Goal> {
     const userId = await getEffectiveUserId();
+    const goalTitle = goal.title || (goal as any).name || 'Maqsad';
+    const targetAmount = Number(goal.target_amount) || 0;
+    const currentAmount = Number(goal.current_amount) || 0;
+
     const newGoal = {
       id: `goal-${Date.now()}`,
       user_id: userId,
-      title: goal.title || (goal as any).name || 'Maqsad',
-      target_amount: goal.target_amount || 0,
-      current_amount: goal.current_amount || 0,
+      title: goalTitle,
+      name: goalTitle,
+      category: 'Umumiy',
+      target_amount: targetAmount,
+      current_amount: currentAmount,
       deadline: goal.deadline || null,
       icon: goal.icon || 'Target',
       color: goal.color || '#29c184',
-      is_completed: 0,
+      is_completed: currentAmount >= targetAmount ? 1 : 0,
       created_at: new Date().toISOString()
     };
 
     try {
       const { data, error } = await supabase.from('goals').insert([newGoal]).select().single();
-      if (!error && data) return data;
+      if (!error && data) {
+        return {
+          ...data,
+          title: data.title || data.name || goalTitle,
+          target_amount: Number(data.target_amount) || targetAmount,
+          current_amount: Number(data.current_amount) || currentAmount
+        };
+      }
     } catch {}
 
     const data = await request<{ success: boolean; goal: Goal }>('/goals', {
@@ -963,14 +997,14 @@ export const api = {
     try {
       const { data: g } = await supabase.from('goals').select('*').eq('id', id).single();
       if (g) {
-        const newCurrent = (g.current_amount || 0) + amount;
-        const isCompleted = newCurrent >= g.target_amount ? 1 : 0;
+        const newCurrent = Number(g.current_amount || 0) + Number(amount);
+        const isCompleted = newCurrent >= Number(g.target_amount) ? 1 : 0;
         await supabase.from('goals').update({ current_amount: newCurrent, is_completed: isCompleted }).eq('id', id);
 
         if (wallet_id) {
           const { data: w } = await supabase.from('wallets').select('balance').eq('id', wallet_id).single();
           if (w) {
-            await supabase.from('wallets').update({ balance: w.balance - amount }).eq('id', wallet_id);
+            await supabase.from('wallets').update({ balance: Number(w.balance) - Number(amount) }).eq('id', wallet_id);
           }
         }
         return { success: true };
@@ -982,6 +1016,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount, wallet_id })
     });
+  },
+
+  async deleteGoal(id: string) {
+    try {
+      await supabase.from('goals').delete().eq('id', id);
+    } catch {}
+
+    try {
+      return await request(`/goals/${id}`, { method: 'DELETE' });
+    } catch {
+      return { success: true };
+    }
   },
 
   // Articles

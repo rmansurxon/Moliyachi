@@ -577,6 +577,15 @@ app.post('/api/goals/:id/contribute', (req, res) => {
   res.json({ success: true, goal: updated });
 });
 
+app.delete('/api/goals/:id', async (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM goals WHERE id = ? AND user_id = ?').run(id, user.id);
+  } catch {}
+  res.json({ success: true });
+});
+
 // --- GAMIFICATION & VOUCHERS ---
 app.get('/api/gamification/status', (req, res) => {
   const user = (req as any).user;

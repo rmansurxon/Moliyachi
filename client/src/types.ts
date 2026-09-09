@@ -85,11 +85,15 @@ export interface Goal {
   id: string;
   user_id: string;
   title: string;
+  name?: string;
   target_amount: number;
   current_amount: number;
   deadline?: string;
   icon: string;
   color: string;
+  category?: string;
+  is_completed?: number;
+  created_at?: string;
 }
 
 export interface Voucher {

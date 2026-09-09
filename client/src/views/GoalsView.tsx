@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Goal, Wallet } from '../types';
 import { api, triggerHaptic } from '../api';
 import { Icon } from '../components/Icon';
-import { Plus, Target, Calendar, Check, TrendingUp } from 'lucide-react';
+import { Plus, Target, Calendar, Check, TrendingUp, Trash2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface GoalsViewProps {
@@ -28,6 +28,18 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ goals, wallets, onReload }
 
   const icons = ['Target', 'Laptop', 'Car', 'Plane', 'Home', 'Smartphone', 'GraduationCap', 'Heart'];
   const colors = ['#29c184', '#1570ef', '#ff8d28', '#7a5af8', '#f0646e', '#eab308'];
+
+  const handleDeleteGoal = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm("Haqiqatan ham ushbu maqsadni o'chirmoqchimisiz?")) return;
+    triggerHaptic('warning');
+    try {
+      await api.deleteGoal(id);
+      onReload();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +144,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ goals, wallets, onReload }
                       <Icon name={g.icon} size={20} />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-white light:text-[#1d2939]">{g.title}</h3>
+                      <h3 className="text-base font-bold text-white light:text-[#1d2939]">{g.title || g.name || 'Maqsad'}</h3>
                       {g.deadline && (
                         <p className="flex items-center gap-1 text-[11px] text-[#899098] mt-0.5">
                           <Calendar className="w-3 h-3" />
@@ -142,7 +154,16 @@ export const GoalsView: React.FC<GoalsViewProps> = ({ goals, wallets, onReload }
                     </div>
                   </div>
 
-                  <span className="text-sm font-black text-[#29c184]">{percent}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-[#29c184]">{percent}%</span>
+                    <button
+                      onClick={(e) => handleDeleteGoal(g.id, e)}
+                      className="p-1 rounded-lg text-[#899098] hover:text-[#f0646e] hover:bg-[#f0646e]/10 transition-colors cursor-pointer"
+                      title="Maqsadni o'chirish"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Progress bar */}

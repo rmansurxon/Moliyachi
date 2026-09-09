@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FinancialSummary } from '../types';
 import { api, triggerHaptic } from '../api';
 import { Icon } from '../components/Icon';
-import { BarChart3, TrendingUp, TrendingDown, PiggyBank, Sparkles, ChevronRight } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react';
 
 interface StatisticsViewProps {
   onOpenMonthlyWrap: () => void;
@@ -64,29 +64,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ onOpenMonthlyWra
         </div>
       </div>
 
-      {/* Spotify-Wrapped Style Oylik Yakun Banner */}
-      <div
-        onClick={() => {
-          triggerHaptic('medium');
-          onOpenMonthlyWrap();
-        }}
-        className="p-4 rounded-3xl bg-gradient-to-r from-[#7a5af8]/25 via-[#2fa8cc]/20 to-[#29c184]/25 border border-[#7a5af8]/40 flex items-center justify-between cursor-pointer active:scale-98 transition-all group shadow-lg"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#7a5af8] to-[#2fa8cc] flex items-center justify-center text-white font-black shadow-md">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="text-sm font-extrabold text-white light:text-[#1d2939] group-hover:text-[#29c184] transition-colors">
-              Oylik Yakun (Stories)
-            </h4>
-            <p className="text-[11px] text-[#b6bfd0] light:text-[#475467]">
-              Oylik moliyaviy natijalaringiz va xulosalaringiz
-            </p>
-          </div>
-        </div>
-        <ChevronRight className="w-5 h-5 text-[#29c184] group-hover:translate-x-1 transition-transform" />
-      </div>
 
       {summary && (
         <>
