@@ -28,7 +28,32 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | '
   } catch { }
 }
 
-const API_BASE = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api');
+export function getApiBase(): string {
+  let url = (import.meta.env.VITE_API_URL || '').trim();
+
+  // If no env var is provided, fallback directly to Railway production backend
+  if (!url) {
+    return 'https://moliyachi-production-f579.up.railway.app/api';
+  }
+
+  // If it's a relative path like '/api'
+  if (url.startsWith('/')) {
+    return url;
+  }
+
+  // Ensure protocol is present so the browser doesn't treat it as a relative URL on Vercel
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+
+  // Strip trailing slash
+  url = url.replace(/\/+$/, '');
+
+  // Append /api if not already present
+  return url.endsWith('/api') ? url : `${url}/api`;
+}
+
+const API_BASE = getApiBase();
 
 // Centralized request helper with Telegram Auto-Auth & persistence
 export function getAuthHeaders(): Record<string, string> {

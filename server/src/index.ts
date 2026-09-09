@@ -587,6 +587,46 @@ app.delete('/api/goals/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+app.put('/api/goals/:id', (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { title, target_amount, current_amount, deadline, icon, color } = req.body;
+  try {
+    db.prepare(`
+      UPDATE goals 
+      SET title = COALESCE(?, title),
+          target_amount = COALESCE(?, target_amount),
+          current_amount = COALESCE(?, current_amount),
+          deadline = COALESCE(?, deadline),
+          icon = COALESCE(?, icon),
+          color = COALESCE(?, color)
+      WHERE id = ? AND user_id = ?
+    `).run(title, target_amount !== undefined ? Number(target_amount) : null, current_amount !== undefined ? Number(current_amount) : null, deadline, icon, color, id, user.id);
+  } catch {}
+  const updated = db.prepare('SELECT * FROM goals WHERE id = ?').get(id);
+  res.json({ success: true, goal: updated });
+});
+
+app.patch('/api/goals/:id', (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { title, target_amount, current_amount, deadline, icon, color } = req.body;
+  try {
+    db.prepare(`
+      UPDATE goals 
+      SET title = COALESCE(?, title),
+          target_amount = COALESCE(?, target_amount),
+          current_amount = COALESCE(?, current_amount),
+          deadline = COALESCE(?, deadline),
+          icon = COALESCE(?, icon),
+          color = COALESCE(?, color)
+      WHERE id = ? AND user_id = ?
+    `).run(title, target_amount !== undefined ? Number(target_amount) : null, current_amount !== undefined ? Number(current_amount) : null, deadline, icon, color, id, user.id);
+  } catch {}
+  const updated = db.prepare('SELECT * FROM goals WHERE id = ?').get(id);
+  res.json({ success: true, goal: updated });
+});
+
 // --- GAMIFICATION & VOUCHERS ---
 app.get('/api/gamification/status', (req, res) => {
   const user = (req as any).user;
